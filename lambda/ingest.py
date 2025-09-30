@@ -77,10 +77,12 @@ def extract_text_from_key(bucket, key, local_path):
         with open(local_path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
 
-def bedrock_embed(text: str) -> List[float]:
-    # Using titan embed model invocation pattern
-    payload = {"input": text}
-    # Model identifier may change; for PoC we call titan-embed-like model
+def bedrock_embed(text: str, metadata: dict) -> List[float]:
+    # Use Bedrock Knowledge Base service for embedding
+    payload = {
+        "input": text,
+        "metadata": metadata  # Pass metadata for indexing
+    }
     response = bedrock.invoke_model(
         modelId='amazon.titan-embed-text-v1',
         contentType='application/json',
@@ -88,13 +90,22 @@ def bedrock_embed(text: str) -> List[float]:
     )
     body = response['body'].read()
     data = json.loads(body)
-    # Expected structure: {'embedding': [float,...]} or variant
     if 'embedding' in data:
         return data['embedding']
-    if 'embeddings' in data:
-        return data['embeddings'][0]
-    # fallback
-    raise RuntimeError('Unexpected bedrock response: %s' % (data,))
+    raise RuntimeError('Unexpected Bedrock response: %s' % (data,))
+
+def retrieve_chunks(conn, document_ids: List[str]) -> List[dict]:
+    # Retrieve chunks by filtering on document IDs
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding
+            FROM document_chunks
+            WHERE document_id = ANY(%s)
+            """,
+            (document_ids,)
+        )
+        return cur.fetchall()
 
 def insert_chunk(conn, metadata: dict, chunk_text: str, embedding: List[float]):
     with conn.cursor() as cur:
@@ -149,7 +160,7 @@ def lambda_handler(event, context):
         conn = connect_db(creds)
         try:
             for ch in chunks:
-                emb = bedrock_embed(ch)
+                emb = bedrock_embed(ch, metadata)  # Pass metadata for embedding
                 insert_chunk(conn, metadata, ch, emb)
         finally:
             conn.close()
