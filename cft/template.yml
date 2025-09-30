@@ -53,6 +53,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
+      AvailabilityZone: ap-south-1a
       Tags:
         - Key: Name
           Value: bedrock-poc-private-subnet-1
@@ -62,6 +63,7 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-south-1b
       Tags:
         - Key: Name
           Value: bedrock-poc-private-subnet-2
