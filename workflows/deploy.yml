@@ -1,0 +1,60 @@
+name: CI/CD - Deploy CloudFormation PoC
+
+on:
+  push:
+    branches: 
+      - main
+  workflow_dispatch:
+    Environment:
+        description: "Select the deployment environment"
+        type: choice
+        required: true
+        options:
+          - dev
+
+jobs:
+  package-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Prepare Lambda package
+        run: |
+          python -m pip install --upgrade pip
+          pip install --target ./package -r lambda/requirements.txt
+          cp lambda/ingest.py ./package/
+          pushd package
+          zip -r ../ingest.zip .
+          popd
+
+      - name: Upload lambda artifact to S3
+        env:
+          AWS_REGION: ap-south-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws s3 cp ingest.zip s3://${{ secrets.CFN_CODE_BUCKET }}/lambda/ingest.zip --region $AWS_REGION
+
+      - name: Deploy CloudFormation
+        env:
+          AWS_REGION: ap-south-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws cloudformation deploy \
+            --template-file cloudformation/template.yml \
+            --stack-name bedrock-s3-ingest-poc \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides CodeS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
+            CodeS3Key=lambda/ingest.zip DBUsername=poc_admin DBName=bedrock_poc \
+            --region $AWS_REGION
