@@ -270,6 +270,12 @@ Resources:
                   - bedrock:IndexDocument  # Allow indexing documents
                   - bedrock:RetrieveDocument  # Allow retrieving documents
                 Resource: !Sub arn:aws:bedrock:ap-south-1:632944299864:*
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                Resource: "*"
 
   ### Lambda function (in VPC)
   IngestLambdaFunction:
