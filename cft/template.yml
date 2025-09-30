@@ -180,6 +180,7 @@ Resources:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
         GenerateStringKey: password
         PasswordLength: 20
+        ExcludeCharacters: '/@" '  # Exclude invalid characters for RDS passwords
 
   ### Security Groups
   RDSSecurityGroup:
@@ -298,6 +299,30 @@ Resources:
           REGION: ap-south-1
           METADATA_FIELDS: "Tenant_Id,User_Id,Document_Id,Project_Id,Thread_Id" # New metadata fields
 
+  ### Lambda function for Knowledge Base Handler
+  KnowledgeBaseHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bedrock-knowledge-base-handler
+      Runtime: python3.11
+      Handler: knowledgebase_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 1024
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: lambda/knowledgebase_handler.zip
+      Environment:
+        Variables:
+          CHUNK_SIZE: "800"
+          OVERLAP: "100"
+
   ### S3 Bucket for ingestion (uploads trigger Lambda)
   S3IngestBucket:
     Type: AWS::S3::Bucket
@@ -318,10 +343,11 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: 632944299864
 
+  ### Knowledge Base Custom Resource
   KnowledgeBase:
     Type: Custom::BedrockKnowledgeBase
     Properties:
-      ServiceToken: arn:aws:lambda:ap-south-1:632944299864:function:bedrock-knowledge-base-handler
+      ServiceToken: !GetAtt KnowledgeBaseHandlerFunction.Arn
       S3Bucket: !Ref S3IngestBucket
       EmbeddingModel: !Ref EmbeddingModel
       VectorStore: !Ref VectorStore
@@ -330,7 +356,7 @@ Resources:
         - User_Id
         - Document_Id
         - Project_Id
-        - Thread_Id # Ensure metadata fields are defined
+        - Thread_Id
 
 Outputs:
   S3BucketName:
