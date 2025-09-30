@@ -6,10 +6,10 @@ Description: >-
 Parameters:
   CodeS3Bucket:
     Type: String
-    Description: S3 bucket where Lambda artifact zip will be uploaded by CI
+    Description: S3 bucket name where Lambda artifact zip will be uploaded by CI (must not include folder paths)
   CodeS3Key:
     Type: String
-    Description: S3 key (path) to the Lambda artifact zip (e.g. lambda/ingest.zip)
+    Description: S3 key (path) to the Lambda artifact zip within the bucket (e.g., lambda/ingest.zip)
   DBUsername:
     Type: String
     Default: poc_admin
