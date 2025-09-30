@@ -1,0 +1,7 @@
+boto3
+psycopg2-binary
+langchain
+python-multipart
+beautifulsoup4
+pdfminer.six
+requests
