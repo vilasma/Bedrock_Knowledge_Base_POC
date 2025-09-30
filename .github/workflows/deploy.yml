@@ -43,7 +43,11 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::[^:]+:([^:]+)$#\1#')
+          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "Error: Bucket name could not be extracted from CFN_CODE_BUCKET."
+            exit 1
+          fi
           aws s3 cp ingest.zip s3://$BUCKET_NAME/lambda/ingest.zip --region $AWS_REGION
 
       - name: Deploy CloudFormation
