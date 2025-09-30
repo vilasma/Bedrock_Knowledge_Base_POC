@@ -57,7 +57,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws cloudformation deploy \
-            --template-file cloudformation/template.yml \
+            --template-file cft/template.yml \
             --stack-name bedrock-s3-ingest-poc \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides CodeS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
