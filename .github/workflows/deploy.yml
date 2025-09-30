@@ -39,7 +39,7 @@ jobs:
 
       - name: Upload lambda artifact to S3
         env:
-          AWS_REGION: ap-south-1
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
@@ -47,7 +47,7 @@ jobs:
 
       - name: Deploy CloudFormation
         env:
-          AWS_REGION: ap-south-1
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
