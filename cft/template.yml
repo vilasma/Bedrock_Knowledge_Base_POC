@@ -328,6 +328,9 @@ Resources:
         Variables:
           CHUNK_SIZE: "800"
           OVERLAP: "100"
+      Tags:
+        - Key: Region
+          Value: us-east-1  # Deploy in us-east-1 region
 
   ### S3 Bucket for ingestion (uploads trigger Lambda)
   S3IngestBucket:
@@ -349,12 +352,12 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: 632944299864
 
-  ### Knowledge Base Custom Resource
+  ### Knowledge Base for Aurora PgVector in us-east-1
   KnowledgeBase:
-    Type: Custom::BedrockKnowledgeBase
+    Type: AWS::Bedrock::KnowledgeBase
     Properties:
-      ServiceToken: !GetAtt KnowledgeBaseHandlerFunction.Arn
-      S3Bucket: !Ref S3IngestBucket
+      Name: bedrock-ingest-poc-knowledge-base
+      Description: Knowledge Base for Aurora PostgreSQL with pgvector
       EmbeddingModel: !Ref EmbeddingModel
       VectorStore: !Ref VectorStore
       MetadataFields:
@@ -363,6 +366,15 @@ Resources:
         - Document_Id
         - Project_Id
         - Thread_Id
+      DataSourceConfiguration:
+        Type: AuroraPgVector
+        AuroraPgVectorConfiguration:
+          DatabaseName: !Ref DBName
+          ClusterArn: !GetAtt RDSInstance.DBClusterArn
+          SecretArn: !Ref DBSecret
+      Tags:
+        - Key: Region
+          Value: us-east-1  # Deploy Knowledge Base in us-east-1
 
 Outputs:
   S3BucketName:
