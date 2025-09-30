@@ -25,6 +25,20 @@ Parameters:
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
+  EmbeddingModel:
+    Type: String
+    Default: Titan
+    AllowedValues:
+      - Titan
+      - Cohere
+    Description: Choose the embedding model (Titan or Cohere)
+  VectorStore:
+    Type: String
+    Default: AuroraPgVector
+    AllowedValues:
+      - AuroraPgVector
+      - OpenSearch
+    Description: Choose the vector store (Aurora pgvector or OpenSearch)
 
 Resources:
   ### Networking: VPC, Subnets, IGW, NAT, RouteTables
@@ -301,6 +315,25 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: 632944299864
 
+  KnowledgeBase:
+    Type: Custom::BedrockKnowledgeBase
+    Properties:
+      ServiceToken: arn:aws:lambda:ap-south-1:632944299864:function:bedrock-knowledge-base-handler
+      S3Bucket: !Ref S3IngestBucket
+      EmbeddingModel: !Ref EmbeddingModel
+      VectorStore: !Ref VectorStore
+      Tags:
+        - Key: Name
+          Value: bedrock-poc-knowledge-base
+
+  KnowledgeBaseLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: arn:aws:lambda:ap-south-1:632944299864:function:bedrock-knowledge-base-handler
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: 632944299864
+      
 Outputs:
   S3BucketName:
     Description: Upload documents to this bucket to trigger ingestion
@@ -329,3 +362,15 @@ Outputs:
   PrivateSubnet2:
     Description: Private subnet 2
     Value: !Ref PrivateSubnet2
+
+  KnowledgeBaseId:
+    Description: ID of the Bedrock Knowledge Base
+    Value: !Ref KnowledgeBase
+
+  KnowledgeBaseEmbeddingModel:
+    Description: Embedding model used for the Knowledge Base
+    Value: !Ref EmbeddingModel
+
+  KnowledgeBaseVectorStore:
+    Description: Vector store used for the Knowledge Base
+    Value: !Ref VectorStore
