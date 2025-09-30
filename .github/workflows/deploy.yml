@@ -43,7 +43,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          aws s3 cp ingest.zip s3://${{ secrets.CFN_CODE_BUCKET }}/lambda/ingest.zip --region $AWS_REGION
+          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::[^:]+:([^:]+)$#\1#')
+          aws s3 cp ingest.zip s3://$BUCKET_NAME/lambda/ingest.zip --region $AWS_REGION
 
       - name: Deploy CloudFormation
         env:
