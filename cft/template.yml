@@ -403,6 +403,7 @@ Resources:
     Properties:
       Name: bedrock-ingest-poc-knowledge-base
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
@@ -410,16 +411,15 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn   # FIXED: cluster ARN, not instance
+          ResourceArn: !GetAtt RDSClusterInstance.DBInstanceArn  # Use DBInstanceArn for the DB instance
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
-          TableName: "kb_chunks"
+          TableName: kb_chunks
           FieldMapping:
             PrimaryKeyField: id
             TextField: text
             VectorField: vector
             MetadataField: metadata
-      RoleArn: !GetAtt KnowledgeBaseRole.Arn
 
 Outputs:
   S3BucketName:
