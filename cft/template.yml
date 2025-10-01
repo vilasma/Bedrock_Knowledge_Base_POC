@@ -3,12 +3,6 @@ Description: >-
   PoC: S3 -> Lambda (in VPC) -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector in private subnets)
 
 Parameters:
-  CodeS3Bucket:
-    Type: String
-    Description: S3 bucket name where Lambda artifact zip will be uploaded by CI (must not include folder paths)
-  CodeS3Key:
-    Type: String
-    Description: S3 key (path) to the Lambda artifact zip within the bucket (e.g., lambda/ingest.zip)
   DBUsername:
     Type: String
     Default: poc_admin
@@ -263,7 +257,7 @@ Resources:
                   - s3:GetObject
                   - s3:GetObjectAcl
                   - s3:ListBucket
-                Resource: !Sub arn:aws:s3:::${CodeS3Bucket}/*
+                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket/*
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -343,8 +337,8 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: !Ref CodeS3Bucket
-        S3Key: !Ref CodeS3Key
+        S3Bucket: bedrock-poc-ingest-bucket
+        S3Key: lambda/ingest.zip
       Environment:
         Variables:
           DB_SECRET_ARN: !Ref DBSecret
@@ -370,7 +364,7 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: !Ref CodeS3Bucket
+        S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/knowledgebase_handler.zip
       Environment:
         Variables:
@@ -405,11 +399,11 @@ Resources:
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
       RoleArn: !GetAtt KnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
-        Type: VECTOR
+        Type: "VECTOR"
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
       StorageConfiguration:
-        Type: RDS
+        Type: "RDS"
         RdsConfiguration:
           ResourceArn: !GetAtt RDSClusterInstance.Arn   # ✅ FIXED
           CredentialsSecretArn: !Ref DBSecret
