@@ -378,15 +378,17 @@ Resources:
     Properties:
       Name: bedrock-ingest-poc-knowledge-base
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
       StorageConfiguration:
-        Type: AuroraPgVector
-        AuroraPgVectorConfiguration:
+        Type: RDS
+        RdsConfiguration:
+          # proper fields for your Aurora / PostgreSQL + pgvector setup
           DatabaseName: !Ref DBName
-          ClusterArn: !GetAtt RDSInstance.DBInstanceArn   # or DBClusterArn if Aurora
+          ClusterArn: !GetAtt RDSInstance.DBInstanceArn
           SecretArn: !Ref DBSecret
           TableName: "kb_chunks"
           FieldMapping:
@@ -398,9 +400,6 @@ Resources:
               Thread_Id: thread_id
             TextField: text
             VectorField: vector
-      RoleArn: !GetAtt KnowledgeBaseRole.Arn
-
-  
     
 Outputs:
   S3BucketName:
