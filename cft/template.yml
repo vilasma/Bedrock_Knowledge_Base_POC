@@ -174,7 +174,7 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: bedrock-poc/db-credentials
+      Name: bedrock-poc-secret/db-credentials
       Description: Credentials for the PoC PostgreSQL database
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
