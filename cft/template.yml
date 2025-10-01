@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  PoC: S3 -> Lambda (in VPC) -> AWS Bedrock embeddings -> PostgreSQL (RDS in
-  private subnets)
+  PoC: S3 -> Lambda (in VPC) -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector in private subnets)
 
 Parameters:
   CodeS3Bucket:
@@ -18,7 +17,7 @@ Parameters:
     Default: bedrock_poc
   InstanceClass:
     Type: String
-    Default: db.t3.micro
+    Default: db.r6g.large   # recommended instance type for Aurora pgvector
   DBAllocatedStorage:
     Type: Number
     Default: 20
@@ -162,7 +161,7 @@ Resources:
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subnet group for RDS (private subnets)
+      DBSubnetGroupDescription: Subnet group for Aurora PostgreSQL (private subnets)
       SubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
@@ -175,12 +174,12 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: bedrock-poc-secret/db-credentials
-      Description: Credentials for the PoC PostgreSQL database
+      Description: Credentials for the PoC Aurora PostgreSQL cluster
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
         GenerateStringKey: password
         PasswordLength: 20
-        ExcludeCharacters: '/@" '  # Exclude invalid characters for RDS passwords
+        ExcludeCharacters: '/@" '
 
   ### Security Groups
   RDSSecurityGroup:
@@ -210,25 +209,33 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
-  ### RDS Instance (private)
-  RDSInstance:
-    Type: AWS::RDS::DBInstance
+  ### Aurora PostgreSQL Cluster
+  RDSCluster:
+    Type: AWS::RDS::DBCluster
     Properties:
-      DBName: !Ref DBName
-      AllocatedStorage: !Ref DBAllocatedStorage
-      DBInstanceClass: !Ref InstanceClass
-      Engine: postgres
+      Engine: aurora-postgresql
+      EngineVersion: "15.3"
+      DBClusterIdentifier: bedrock-poc-cluster
+      DatabaseName: !Ref DBName
       MasterUsername: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:username}}"]]
       MasterUserPassword: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:password}}"]]
-      VPCSecurityGroups:
-        - !Ref RDSSecurityGroup
       DBSubnetGroupName: !Ref DBSubnetGroup
-      PubliclyAccessible: false
-      BackupRetentionPeriod: 0
+      VpcSecurityGroupIds:
+        - !Ref RDSSecurityGroup
+      StorageEncrypted: true
       DeletionProtection: false
+      BackupRetentionPeriod: 1
+
+  RDSClusterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref RDSCluster
+      DBInstanceClass: !Ref InstanceClass
+      Engine: aurora-postgresql
+      PubliclyAccessible: false
       Tags:
         - Key: Name
-          Value: bedrock-poc-rds
+          Value: bedrock-poc-cluster-instance
 
   ### IAM Role for Lambda
   LambdaExecutionRole:
@@ -263,13 +270,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - rds-db:connect
-                Resource: !Sub arn:aws:rds-db:ap-south-1:632944299864:*
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                  - bedrock:IndexDocument  # Allow indexing documents
-                  - bedrock:RetrieveDocument  # Allow retrieving documents
-                Resource: !Sub arn:aws:bedrock:ap-south-1:632944299864:*
+                  - bedrock:IndexDocument
+                  - bedrock:RetrieveDocument
+                Resource: !Sub arn:aws:bedrock:ap-south-1:${AWS::AccountId}:*
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
@@ -323,12 +330,11 @@ Resources:
         Variables:
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
-          DB_HOST: !GetAtt RDSInstance.Endpoint.Address
-          DB_PORT: !GetAtt RDSInstance.Endpoint.Port
+          DB_HOST: !GetAtt RDSCluster.Endpoint.Address
+          DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: ap-south-1
-          METADATA_FIELDS: "Tenant_Id,User_Id,Document_Id,Project_Id,Thread_Id" # New metadata fields
+          METADATA_FIELDS: "Tenant_Id,User_Id,Document_Id,Project_Id,Thread_Id"
 
-  ### Lambda function for Knowledge Base Handler
   KnowledgeBaseHandlerFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -351,8 +357,8 @@ Resources:
         Variables:
           CHUNK_SIZE: "800"
           OVERLAP: "100"
-    
-  ### S3 Bucket for ingestion (uploads trigger Lambda)
+
+  ### S3 Bucket for ingestion
   S3IngestBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -370,9 +376,9 @@ Resources:
       FunctionName: !Ref IngestLambdaFunction
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
-      SourceAccount: 632944299864
+      SourceAccount: !Ref AWS::AccountId
 
-  ### Knowledge Base for Aurora PgVector
+  ### Bedrock Knowledge Base
   KnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     Properties:
@@ -385,7 +391,7 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSInstance.DBInstanceArn   # or DBClusterArn if Aurora cluster
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn   # FIXED: cluster ARN, not instance
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: "kb_chunks"
@@ -395,19 +401,19 @@ Resources:
             VectorField: vector
             MetadataField: metadata
       RoleArn: !GetAtt KnowledgeBaseRole.Arn
-    
+
 Outputs:
   S3BucketName:
     Description: Upload documents to this bucket to trigger ingestion
     Value: !Ref S3IngestBucket
 
-  RDSInstanceEndpoint:
-    Description: RDS endpoint (use Secrets Manager for password)
-    Value: !GetAtt RDSInstance.Endpoint.Address
+  RDSClusterEndpoint:
+    Description: Aurora cluster endpoint (use Secrets Manager for password)
+    Value: !GetAtt RDSCluster.Endpoint.Address
 
-  RDSInstancePort:
-    Description: RDS endpoint port
-    Value: !GetAtt RDSInstance.Endpoint.Port
+  RDSClusterPort:
+    Description: Aurora cluster port
+    Value: !GetAtt RDSCluster.Endpoint.Port
 
   DBSecretArn:
     Description: Secrets Manager ARN containing DB credentials
@@ -440,4 +446,3 @@ Outputs:
   MetadataFields:
     Description: Metadata fields used for document chunks
     Value: "Tenant_Id, User_Id, Document_Id, Project_Id, Thread_Id"
-  
