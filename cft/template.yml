@@ -382,16 +382,7 @@ Resources:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
-      RoleArn: !GetAtt KnowledgeBaseRole.Arn
-
-  AuroraPgVectorDataSource:
-    Type: AWS::Bedrock::DataSource
-    DependsOn: 
-      - KnowledgeBase
-    Properties:
-      KnowledgeBaseId: !Ref KnowledgeBase
-      Name: aurora-pgvector-ds
-      DataSourceConfiguration:
+      StorageConfiguration:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
           DatabaseName: !Ref DBName
@@ -407,6 +398,9 @@ Resources:
               Thread_Id: thread_id
             TextField: text
             VectorField: vector
+      RoleArn: !GetAtt KnowledgeBaseRole.Arn
+
+  
     
 Outputs:
   S3BucketName:
