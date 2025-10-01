@@ -447,8 +447,3 @@ Outputs:
     Description: Metadata fields used for document chunks
     Value: "Tenant_Id, User_Id, Document_Id, Project_Id, Thread_Id"
   
-  DataSourceId:
-    Description: ID of the AuroraPgVector Data Source
-    Value: !Ref AuroraPgVectorDataSource
-    Export:
-      Name: !Sub "${AWS::StackName}-DataSourceId"
