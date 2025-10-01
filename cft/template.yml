@@ -358,18 +358,21 @@ Resources:
     Properties:
       Name: bedrock-ingest-poc-knowledge-base
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
       DataSourceConfiguration:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
           DatabaseName: !Ref DBName
           ClusterArn: !GetAtt RDSInstance.DBClusterArn
           SecretArn: !Ref DBSecret
-      MetadataFields:
-        - Tenant_Id
-        - User_Id
-        - Document_Id
-        - Project_Id
-        - Thread_Id
+          TableName: "kb_chunks"
+          FieldMapping:
+            MetadataField: metadata
+            TextField: text
+            VectorField: vector
       Tags:
         - Key: Region
           Value: us-east-1  # Deploy Knowledge Base in us-east-1
@@ -409,11 +412,11 @@ Outputs:
 
   KnowledgeBaseEmbeddingModel:
     Description: Embedding model used for the Knowledge Base
-    Value: !Ref EmbeddingModel
+    Value: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
 
   KnowledgeBaseVectorStore:
     Description: Vector store used for the Knowledge Base
-    Value: !Ref VectorStore
+    Value: AuroraPgVector
 
   MetadataFields:
     Description: Metadata fields used for document chunks
