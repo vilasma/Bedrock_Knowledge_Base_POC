@@ -225,6 +225,7 @@ Resources:
       StorageEncrypted: true
       DeletionProtection: false
       BackupRetentionPeriod: 1
+      EnableHttpEndpoint: true
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
