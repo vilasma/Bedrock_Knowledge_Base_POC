@@ -328,10 +328,7 @@ Resources:
         Variables:
           CHUNK_SIZE: "800"
           OVERLAP: "100"
-      Tags:
-        - Key: Region
-          Value: us-east-1  # Deploy in us-east-1 region
-
+    
   ### S3 Bucket for ingestion (uploads trigger Lambda)
   S3IngestBucket:
     Type: AWS::S3::Bucket
@@ -352,7 +349,7 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: 632944299864
 
-  ### Knowledge Base for Aurora PgVector in us-east-1
+  ### Knowledge Base for Aurora PgVector
   KnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     Properties:
@@ -361,7 +358,7 @@ Resources:
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
-          EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
+          EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
       DataSourceConfiguration:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
@@ -370,12 +367,14 @@ Resources:
           SecretArn: !Ref DBSecret
           TableName: "kb_chunks"
           FieldMapping:
-            MetadataField: metadata
+            MetadataField:
+              Tenant_Id: tenant_id
+              User_Id: user_id
+              Document_Id: document_id
+              Project_Id: project_id
+              Thread_Id: thread_id
             TextField: text
             VectorField: vector
-      Tags:
-        - Key: Region
-          Value: us-east-1  # Deploy Knowledge Base in us-east-1
 
 Outputs:
   S3BucketName:
@@ -412,7 +411,7 @@ Outputs:
 
   KnowledgeBaseEmbeddingModel:
     Description: Embedding model used for the Knowledge Base
-    Value: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
+    Value: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
 
   KnowledgeBaseVectorStore:
     Description: Vector store used for the Knowledge Base
