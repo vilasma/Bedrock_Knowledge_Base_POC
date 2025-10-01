@@ -411,7 +411,7 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSClusterInstance.DBInstanceArn  # Use DBInstanceArn for the DB instance
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn  # Correctly referencing DBInstanceArn
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: kb_chunks
@@ -419,7 +419,12 @@ Resources:
             PrimaryKeyField: id
             TextField: text
             VectorField: vector
-            MetadataField: metadata
+            MetadataField: 
+              - tenant_id
+              - user_id
+              - document_id
+              - project_id
+              - thread_id
 
 Outputs:
   S3BucketName:
