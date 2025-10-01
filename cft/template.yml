@@ -303,13 +303,24 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Allow Bedrock to use RDS Data API v2
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !GetAtt RDSCluster.DBClusterArn
+
+              # Allow describe calls
               - Effect: Allow
                 Action:
                   - rds:DescribeDBClusters
                   - rds:DescribeDBInstances
-                  - rds:DescribeDBClusterParameters
-                  - rds:DescribeDBSubnetGroups
                 Resource: "*"
+
+              # Allow Bedrock to fetch DB credentials
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
