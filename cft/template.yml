@@ -411,10 +411,10 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn  # Correctly referencing DBInstanceArn
+          ResourceArn: !GetAtt RDSCluster.DBInstanceArn  # Correctly referencing DBInstanceArn
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
-          TableName: kb_chunks
+          TableName: document_chunks
           FieldMapping:
             PrimaryKeyField: id
             TextField: text
