@@ -411,7 +411,7 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBInstanceArn  # Correctly referencing DBInstanceArn
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn   # ✅ FIXED
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: document_chunks
