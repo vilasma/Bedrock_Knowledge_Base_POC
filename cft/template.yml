@@ -419,12 +419,7 @@ Resources:
             PrimaryKeyField: id
             TextField: text
             VectorField: vector
-            MetadataField: 
-              - tenant_id
-              - user_id
-              - document_id
-              - project_id
-              - thread_id
+            MetadataField: metadata
 
 Outputs:
   S3BucketName:
