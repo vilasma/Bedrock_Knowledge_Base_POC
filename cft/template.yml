@@ -358,20 +358,18 @@ Resources:
     Properties:
       Name: bedrock-ingest-poc-knowledge-base
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
-      EmbeddingModel: !Ref EmbeddingModel
-      VectorStore: !Ref VectorStore
-      MetadataFields:
-        - Tenant_Id
-        - User_Id
-        - Document_Id
-        - Project_Id
-        - Thread_Id
       DataSourceConfiguration:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
           DatabaseName: !Ref DBName
           ClusterArn: !GetAtt RDSInstance.DBClusterArn
           SecretArn: !Ref DBSecret
+      MetadataFields:
+        - Tenant_Id
+        - User_Id
+        - Document_Id
+        - Project_Id
+        - Thread_Id
       Tags:
         - Key: Region
           Value: us-east-1  # Deploy Knowledge Base in us-east-1
