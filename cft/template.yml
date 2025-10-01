@@ -383,11 +383,19 @@ Resources:
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
       RoleArn: !GetAtt KnowledgeBaseRole.Arn
+
+  AuroraPgVectorDataSource:
+    Type: AWS::Bedrock::DataSource
+    DependsOn: 
+      - KnowledgeBase
+    Properties:
+      KnowledgeBaseId: !Ref KnowledgeBase
+      Name: aurora-pgvector-ds
       DataSourceConfiguration:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
           DatabaseName: !Ref DBName
-          ClusterArn: !GetAtt RDSInstance.DBInstanceArn  # Use DBInstanceArn for standalone RDS
+          ClusterArn: !GetAtt RDSInstance.DBInstanceArn   # or DBClusterArn if Aurora
           SecretArn: !Ref DBSecret
           TableName: "kb_chunks"
           FieldMapping:
@@ -444,3 +452,9 @@ Outputs:
   MetadataFields:
     Description: Metadata fields used for document chunks
     Value: "Tenant_Id, User_Id, Document_Id, Project_Id, Thread_Id"
+  
+  DataSourceId:
+    Description: ID of the AuroraPgVector Data Source
+    Value: !Ref AuroraPgVectorDataSource
+    Export:
+      Name: !Sub "${AWS::StackName}-DataSourceId"
