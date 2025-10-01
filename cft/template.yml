@@ -363,7 +363,7 @@ Resources:
         Type: AuroraPgVector
         AuroraPgVectorConfiguration:
           DatabaseName: !Ref DBName
-          ClusterArn: !GetAtt RDSInstance.DBClusterArn
+          ClusterArn: !GetAtt RDSInstance.DBInstanceArn  # Use DBInstanceArn for standalone RDS
           SecretArn: !Ref DBSecret
           TableName: "kb_chunks"
           FieldMapping:
