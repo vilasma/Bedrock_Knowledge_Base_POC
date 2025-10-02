@@ -18,7 +18,7 @@ Parameters:
 
 Resources:
 
-  ### VPC & Subnet (minimal)
+  ### VPC & Subnets (multi-AZ)
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -26,11 +26,20 @@ Resources:
       EnableDnsHostnames: true
       EnableDnsSupport: true
 
-  PublicSubnet:
+  PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
+      AvailabilityZone: ap-south-1a
+      MapPublicIpOnLaunch: true
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-south-1b
       MapPublicIpOnLaunch: true
 
   ### Security Groups
@@ -61,7 +70,8 @@ Resources:
     Properties:
       DBSubnetGroupDescription: Aurora pgvector subnet group
       SubnetIds:
-        - !Ref PublicSubnet
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
 
   DBSecret:
     Type: AWS::SecretsManager::Secret
@@ -149,7 +159,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/init_db.zip
@@ -175,7 +186,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/ingest.zip
@@ -219,7 +231,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PublicSubnetA
+          - !Ref PublicSubnetB
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/knowledgebase_handler.zip
