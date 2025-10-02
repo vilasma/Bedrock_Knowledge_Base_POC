@@ -392,30 +392,30 @@ Resources:
       SourceAccount: !Ref AWS::AccountId
 
   ### Lambda to initialize Aurora pgvector table
-InitDBLambda:
-  Type: AWS::Lambda::Function
-  Properties:
-    FunctionName: bedrock-init-db
-    Runtime: python3.11
-    Handler: init_db.lambda_handler
-    Role: !GetAtt LambdaExecutionRole.Arn
-    Timeout: 300
-    MemorySize: 512
-    VpcConfig:
-      SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-    Code:
-      S3Bucket: bedrock-poc-ingest-bucket
-      S3Key: lambda/init_db.zip
-    Environment:
-      Variables:
-        DB_SECRET_ARN: !Ref DBSecret
-        DB_NAME: !Ref DBName
-        DB_HOST: !GetAtt RDSCluster.Endpoint.Address
-        DB_PORT: !GetAtt RDSCluster.Endpoint.Port
+  InitDBLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bedrock-init-db
+      Runtime: python3.11
+      Handler: init_db.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Code:
+        S3Bucket: bedrock-poc-ingest-bucket
+        S3Key: lambda/init_db.zip
+      Environment:
+        Variables:
+          DB_SECRET_ARN: !Ref DBSecret
+          DB_NAME: !Ref DBName
+          DB_HOST: !GetAtt RDSCluster.Endpoint.Address
+          DB_PORT: !GetAtt RDSCluster.Endpoint.Port
 
   ### Custom Resource to invoke the Lambda
   InitDBCustomResource:
