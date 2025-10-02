@@ -394,6 +394,8 @@ Resources:
   ### Bedrock Knowledge Base
   KnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
+    DependsOn:
+      - RDSClusterInstance
     Properties:
       Name: bedrock-ingest-poc-knowledge-base
       Description: Knowledge Base for Aurora PostgreSQL with pgvector
@@ -405,7 +407,7 @@ Resources:
       StorageConfiguration:
         Type: "RDS"
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSClusterInstance   # ✅ FIXED
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn   # ✅ FIXED
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: document_chunks
