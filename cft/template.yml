@@ -307,24 +307,24 @@ Resources:
           REGION: ap-south-1
 
   ### Bedrock Knowledge Base
-  BedrockKnowledgeBase:
-    Type: AWS::Bedrock::KnowledgeBase
-    Properties:
-      Name: poc-bedrock-kb
-      Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
-      RoleArn: !GetAtt LambdaExecutionRole.Arn
-      StorageConfiguration:
-        RdsConfiguration:
-          ClusterArn: !GetAtt RDSCluster.DBClusterArn
-          CredentialsSecretArn: !Ref DBSecret
-          DatabaseName: !Ref DBName
-          TableName: document_chunks
-          MetadataFields:
-            - tenant_id
-            - user_id
-            - document_id
-            - project_id
-            - thread_id
+  # BedrockKnowledgeBase:
+  #   Type: AWS::Bedrock::KnowledgeBase
+  #   Properties:
+  #     Name: poc-bedrock-kb
+  #     Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
+  #     RoleArn: !GetAtt LambdaExecutionRole.Arn
+  #     StorageConfiguration:
+  #       RdsConfiguration:
+  #         ClusterArn: !GetAtt RDSCluster.DBClusterArn
+  #         CredentialsSecretArn: !Ref DBSecret
+  #         DatabaseName: !Ref DBName
+  #         TableName: document_chunks
+  #         MetadataFields:
+  #           - tenant_id
+  #           - user_id
+  #           - document_id
+  #           - project_id
+  #           - thread_id
 
   ### VPC Endpoints
   SecretsManagerVPCEndpoint:
@@ -387,6 +387,6 @@ Outputs:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
 
-  BedrockKnowledgeBaseArn:
-    Description: ARN of the Bedrock Knowledge Base
-    Value: !Ref BedrockKnowledgeBase
+  # BedrockKnowledgeBaseArn:
+  #   Description: ARN of the Bedrock Knowledge Base
+  #   Value: !Ref BedrockKnowledgeBase
