@@ -1,42 +1,62 @@
-import boto3
 import os
-import json
 import psycopg2
+import json
+import boto3
 
-secrets = boto3.client("secretsmanager")
+DB_HOST = os.environ['DB_HOST']
+DB_PORT = os.environ['DB_PORT']
+DB_NAME = os.environ['DB_NAME']
+DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
+REGION = os.environ.get('REGION', 'ap-south-1')
 
-DB_SECRET_ARN = os.environ["DB_SECRET_ARN"]
-DB_NAME = os.environ["DB_NAME"]
-DB_HOST = os.environ["DB_HOST"]
-DB_PORT = os.environ["DB_PORT"]
-
-def get_db_credentials():
-    secret = secrets.get_secret_value(SecretId=DB_SECRET_ARN)
-    creds = json.loads(secret["SecretString"])
-    return creds["username"], creds["password"]
+def get_db_credentials(secret_arn):
+    client = boto3.client('secretsmanager', region_name=REGION)
+    secret = client.get_secret_value(SecretId=secret_arn)
+    creds = json.loads(secret['SecretString'])
+    return creds['username'], creds['password']
 
 def lambda_handler(event, context):
-    print("Init DB event:", json.dumps(event))
+    username, password = get_db_credentials(DB_SECRET_ARN)
 
-    user, password = get_db_credentials()
     conn = psycopg2.connect(
-        dbname=DB_NAME, user=user, password=password,
-        host=DB_HOST, port=DB_PORT
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=username,
+        password=password
     )
     cur = conn.cursor()
 
-    # Enable pgvector and create table if not exists
-    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS document_chunks (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            text TEXT NOT NULL,
-            vector VECTOR(1536),
-            metadata JSONB
-        );
-    """)
+    create_table_query = """
+    -- Create extension for vector operations
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- Create table for chunks (run once after DB is reachable)
+    CREATE TABLE IF NOT EXISTS document_chunks (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(128),
+        user_id VARCHAR(128),
+        document_id VARCHAR(256),
+        project_id VARCHAR(128),
+        thread_id VARCHAR(128),
+        chunk_text TEXT,
+        embedding vector(1536),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Index for fast similarity search
+    CREATE INDEX IF NOT EXISTS idx_document_embedding 
+    ON document_chunks USING ivfflat (embedding vector_l2_ops) 
+    WITH (lists = 100);
+
+    -- Index on document_id for filtering
+    CREATE INDEX IF NOT EXISTS idx_document_id 
+    ON document_chunks(document_id);
+    """
+
+    cur.execute(create_table_query)
     conn.commit()
     cur.close()
     conn.close()
 
-    return {"status": "table ready"}
+    return {"statusCode": 200, "body": "Table created successfully"}

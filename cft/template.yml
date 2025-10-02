@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >-
-  PoC: S3 -> Lambda (in VPC) -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector in private subnets)
+Description: >
+  PoC: S3 -> Lambda -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector). Full ingestion + retrieval pipeline with metadata and document-level status.
 
 Parameters:
   DBUsername:
@@ -11,188 +11,40 @@ Parameters:
     Default: bedrock_poc
   InstanceClass:
     Type: String
-    Default: db.r6g.large   # recommended instance type for Aurora pgvector
+    Default: db.r6g.large
   DBAllocatedStorage:
     Type: Number
     Default: 20
-  VpcCidr:
-    Type: String
-    Default: 10.0.0.0/16
-  EmbeddingModel:
-    Type: String
-    Default: Titan
-    AllowedValues:
-      - Titan
-      - Cohere
-    Description: Choose the embedding model (Titan or Cohere)
-  VectorStore:
-    Type: String
-    Default: AuroraPgVector
-    AllowedValues:
-      - AuroraPgVector
-      - OpenSearch
-    Description: Choose the vector store (Aurora pgvector or OpenSearch)
 
 Resources:
-  ### Networking: VPC, Subnets, IGW, NAT, RouteTables
+
+  ### VPC & Subnet (minimal)
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: !Ref VpcCidr
+      CidrBlock: 10.0.0.0/16
       EnableDnsHostnames: true
       EnableDnsSupport: true
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-vpc
 
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-public-subnet
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: ap-south-1a
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-private-subnet-1
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: ap-south-1b
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-private-subnet-2
-
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-igw
-
-  AttachGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref VPC
-      InternetGatewayId: !Ref InternetGateway
-
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-public-rt
-
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: AttachGateway
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  PublicSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet
-      RouteTableId: !Ref PublicRouteTable
-
-  NATGatewayEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
-  NATGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NATGatewayEIP.AllocationId
-      SubnetId: !Ref PublicSubnet
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-nat
-
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-private-rt
-
-  PrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NATGateway
-
-  PrivateSubnet1Association:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet1
-      RouteTableId: !Ref PrivateRouteTable
-
-  PrivateSubnet2Association:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet2
-      RouteTableId: !Ref PrivateRouteTable
-
-  ### RDS Subnet Group
-  DBSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: Subnet group for Aurora PostgreSQL (private subnets)
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-db-subnet-group
-
-  ### Secrets Manager for DB credentials
-  DBSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: bedrock-poc-secret/db-credentials
-      Description: Credentials for the PoC Aurora PostgreSQL cluster
-      GenerateSecretString:
-        SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
-        GenerateStringKey: password
-        PasswordLength: 20
-        ExcludeCharacters: '/@" '
+      MapPublicIpOnLaunch: true
 
   ### Security Groups
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow DB access from Lambda security group
+      GroupDescription: Allow DB access from Lambda
       VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-rds-sg
 
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Lambda functions security group
       VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-lambda-sg
 
   RDSSGIngressFromLambda:
     Type: AWS::EC2::SecurityGroupIngress
@@ -203,13 +55,28 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
-  ### Aurora PostgreSQL Cluster
+  ### Aurora PostgreSQL
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurora pgvector subnet group
+      SubnetIds:
+        - !Ref PublicSubnet
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: poc-db-credentials
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
+        GenerateStringKey: password
+        PasswordLength: 20
+
   RDSCluster:
     Type: AWS::RDS::DBCluster
     Properties:
       Engine: aurora-postgresql
       EngineVersion: "15.3"
-      DBClusterIdentifier: bedrock-poc-cluster
       DatabaseName: !Ref DBName
       MasterUsername: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:username}}"]]
       MasterUserPassword: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:password}}"]]
@@ -217,9 +84,6 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref RDSSecurityGroup
       StorageEncrypted: true
-      DeletionProtection: false
-      BackupRetentionPeriod: 1
-      EnableHttpEndpoint: true
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
@@ -228,9 +92,6 @@ Resources:
       DBInstanceClass: !Ref InstanceClass
       Engine: aurora-postgresql
       PubliclyAccessible: false
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-cluster-instance
 
   ### IAM Role for Lambda
   LambdaExecutionRole:
@@ -241,10 +102,8 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
+              Service: lambda.amazonaws.com
             Action: sts:AssumeRole
-      Path: /
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
@@ -255,9 +114,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                  - s3:GetObjectAcl
                   - s3:ListBucket
-                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket/*
+                Resource: !Sub arn:aws:s3:::poc-ingest-bucket/*
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -269,9 +127,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                  - bedrock:IndexDocument
-                  - bedrock:RetrieveDocument
-                Resource: !Sub arn:aws:bedrock:ap-south-1:${AWS::AccountId}:*
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
@@ -279,52 +135,37 @@ Resources:
                   - ec2:DeleteNetworkInterface
                 Resource: "*"
 
-  ### IAM Role for Knowledge Base
-  KnowledgeBaseRole:
-    Type: AWS::IAM::Role
+  ### Init DB Lambda
+  InitDBLambda:
+    Type: AWS::Lambda::Function
     Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: bedrock.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-      Policies:
-        - PolicyName: BedrockKnowledgeBaseRDSAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              # Allow Bedrock to use RDS Data API v2
-              - Effect: Allow
-                Action:
-                  - rds-data:ExecuteStatement
-                  - rds-data:BatchExecuteStatement
-                  - rds-data:BeginTransaction
-                  - rds-data:CommitTransaction
-                  - rds-data:RollbackTransaction
-                Resource: !GetAtt RDSCluster.DBClusterArn
+      FunctionName: poc-init-db
+      Runtime: python3.11
+      Handler: init_db.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PublicSubnet
+      Code:
+        S3Bucket: bedrock-poc-ingest-bucket
+        S3Key: lambda/init_db.zip
+      Environment:
+        Variables:
+          DB_SECRET_ARN: !Ref DBSecret
+          DB_NAME: !Ref DBName
+          DB_HOST: !GetAtt RDSCluster.Endpoint.Address
+          DB_PORT: !GetAtt RDSCluster.Endpoint.Port
+          REGION: ap-south-1
 
-              # Allow describe calls
-              - Effect: Allow
-                Action:
-                  - rds:DescribeDBClusters
-                  - rds:DescribeDBInstances
-                Resource: "*"
-
-              # Allow Bedrock to fetch DB credentials
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref DBSecret
-
-  ### Lambda function (in VPC)
+  ### Ingest Lambda
   IngestLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: bedrock-s3-ingest-poc
+      FunctionName: poc-s3-ingest
       Runtime: python3.11
       Handler: ingest.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -334,8 +175,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
+          - !Ref PublicSubnet
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/ingest.zip
@@ -348,30 +188,7 @@ Resources:
           REGION: ap-south-1
           METADATA_FIELDS: "Tenant_Id,User_Id,Document_Id,Project_Id,Thread_Id"
 
-  KnowledgeBaseHandlerFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: bedrock-knowledge-base-handler
-      Runtime: python3.11
-      Handler: knowledgebase_handler.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-      MemorySize: 1024
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-      Code:
-        S3Bucket: bedrock-poc-ingest-bucket
-        S3Key: lambda/knowledgebase_handler.zip
-      Environment:
-        Variables:
-          CHUNK_SIZE: "800"
-          OVERLAP: "100"
-
-  ### S3 Bucket for ingestion
+  ### S3 Bucket
   S3IngestBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -379,9 +196,6 @@ Resources:
         LambdaConfigurations:
           - Event: s3:ObjectCreated:*
             Function: !GetAtt IngestLambdaFunction.Arn
-      Tags:
-        - Key: Name
-          Value: bedrock-poc-ingest-bucket
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
@@ -391,73 +205,39 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
 
-  ### Lambda to initialize Aurora pgvector table
-  InitDBLambda:
+  ### Knowledge Base Handler Lambda
+  KnowledgeBaseHandlerFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: bedrock-init-db
+      FunctionName: poc-kb-handler
       Runtime: python3.11
-      Handler: init_db.lambda_handler
+      Handler: knowledgebase_handler.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
-      MemorySize: 512
+      MemorySize: 1024
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
+          - !Ref PublicSubnet
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
-        S3Key: lambda/init_db.zip
+        S3Key: lambda/knowledgebase_handler.zip
       Environment:
         Variables:
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-
-  ### Custom Resource to invoke the Lambda
-  InitDBCustomResource:
-    Type: Custom::InitDB
-    Properties:
-      ServiceToken: !GetAtt InitDBLambda.Arn
-    DependsOn:
-      - RDSClusterInstance
-
-  ### Bedrock Knowledge Base
-  KnowledgeBase:
-    Type: AWS::Bedrock::KnowledgeBase
-    DependsOn:
-      - InitDBCustomResource
-    Properties:
-      Name: bedrock-ingest-poc-knowledge-base
-      Description: Knowledge Base for Aurora PostgreSQL with pgvector
-      RoleArn: !GetAtt KnowledgeBaseRole.Arn
-      KnowledgeBaseConfiguration:
-        Type: "VECTOR"
-        VectorKnowledgeBaseConfiguration:
-          EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
-      StorageConfiguration:
-        Type: "RDS"
-        RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn   # ✅ FIXED
-          CredentialsSecretArn: !Ref DBSecret
-          DatabaseName: !Ref DBName
-          TableName: document_chunks
-          FieldMapping:
-            PrimaryKeyField: id
-            TextField: text
-            VectorField: vector
-            MetadataField: metadata
+          REGION: ap-south-1
 
 Outputs:
   S3BucketName:
-    Description: Upload documents to this bucket to trigger ingestion
+    Description: Upload documents to this bucket
     Value: !Ref S3IngestBucket
 
   RDSClusterEndpoint:
-    Description: Aurora cluster endpoint (use Secrets Manager for password)
+    Description: Aurora cluster endpoint
     Value: !GetAtt RDSCluster.Endpoint.Address
 
   RDSClusterPort:
@@ -468,30 +248,14 @@ Outputs:
     Description: Secrets Manager ARN containing DB credentials
     Value: !Ref DBSecret
 
-  VpcId:
-    Description: VPC Id
-    Value: !Ref VPC
+  InitDBLambdaName:
+    Description: Lambda function to initialize DB
+    Value: !Ref InitDBLambda
 
-  PrivateSubnet1:
-    Description: Private subnet 1
-    Value: !Ref PrivateSubnet1
+  IngestLambdaName:
+    Description: Lambda function for ingestion
+    Value: !Ref IngestLambdaFunction
 
-  PrivateSubnet2:
-    Description: Private subnet 2
-    Value: !Ref PrivateSubnet2
-
-  KnowledgeBaseId:
-    Description: ID of the Bedrock Knowledge Base
-    Value: !Ref KnowledgeBase
-
-  KnowledgeBaseEmbeddingModel:
-    Description: Embedding model used for the Knowledge Base
-    Value: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v2:0
-
-  KnowledgeBaseVectorStore:
-    Description: Vector store used for the Knowledge Base
-    Value: AuroraPgVector
-
-  MetadataFields:
-    Description: Metadata fields used for document chunks
-    Value: "Tenant_Id, User_Id, Document_Id, Project_Id, Thread_Id"
+  KnowledgeBaseHandlerLambdaName:
+    Description: Lambda function to query/retrieve document chunks
+    Value: !Ref KnowledgeBaseHandlerFunction
