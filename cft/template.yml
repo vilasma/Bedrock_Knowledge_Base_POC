@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  PoC: S3 -> Lambda -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector). Full ingestion + retrieval pipeline with metadata and document-level status.
+  PoC: S3 -> Lambda -> AWS Bedrock embeddings -> Aurora PostgreSQL (pgvector)
+  Full ingestion + retrieval pipeline with metadata and document-level status.
 
 Parameters:
   DBUsername:
@@ -18,7 +19,7 @@ Parameters:
 
 Resources:
 
-  ### VPC & Subnets (multi-AZ)
+  ### VPC & Subnet
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -26,21 +27,23 @@ Resources:
       EnableDnsHostnames: true
       EnableDnsSupport: true
 
-  PublicSubnetA:
+  PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
-      AvailabilityZone: ap-south-1a
       MapPublicIpOnLaunch: true
 
-  PublicSubnetB:
-    Type: AWS::EC2::Subnet
+  PublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: ap-south-1b
-      MapPublicIpOnLaunch: true
+
+  PublicSubnetRoute:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicSubnetRouteTable
 
   ### Security Groups
   RDSSecurityGroup:
@@ -64,14 +67,22 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
+  LambdaSGEgressHTTPS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref LambdaSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
   ### Aurora PostgreSQL
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: Aurora pgvector subnet group
       SubnetIds:
-        - !Ref PublicSubnetA
-        - !Ref PublicSubnetB
+        - !Ref PublicSubnet
 
   DBSecret:
     Type: AWS::SecretsManager::Secret
@@ -125,7 +136,7 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:ListBucket
-                Resource: !Sub arn:aws:s3:::poc-ingest-bucket/*
+                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket/*
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -159,8 +170,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnetA
-          - !Ref PublicSubnetB
+          - !Ref PublicSubnet
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/init_db.zip
@@ -186,8 +196,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnetA
-          - !Ref PublicSubnetB
+          - !Ref PublicSubnet
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/ingest.zip
@@ -198,7 +207,7 @@ Resources:
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: ap-south-1
-          METADATA_FIELDS: "Tenant_Id,User_Id,Document_Id,Project_Id,Thread_Id"
+          METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
 
   ### S3 Bucket
   S3IngestBucket:
@@ -231,8 +240,7 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnetA
-          - !Ref PublicSubnetB
+          - !Ref PublicSubnet
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/knowledgebase_handler.zip
@@ -243,6 +251,60 @@ Resources:
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: ap-south-1
+
+  # ### Bedrock Knowledge Base
+  # BedrockKnowledgeBase:
+  #   Type: AWS::Bedrock::KnowledgeBase
+  #   Properties:
+  #     Name: poc-bedrock-kb
+  #     Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
+  #     ClientToken: !Sub kb-${AWS::StackName}-${AWS::Region}
+  #     RoleArn: !GetAtt LambdaExecutionRole.Arn
+  #     DataSourceConfiguration:
+  #       Type: AuroraPgVector
+  #       AuroraPgVectorConfiguration:
+  #         DatabaseName: !Ref DBName
+  #         ClusterArn: !GetAtt RDSCluster.DBClusterArn
+  #         CredentialsSecretArn: !Ref DBSecret
+  #         TableName: document_chunks
+  #         MetadataFields:
+  #           - tenant_id
+  #           - user_id
+  #           - document_id
+  #           - project_id
+  #           - thread_id
+
+  ### VPC Endpoints
+  SecretsManagerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      SubnetIds:
+        - !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
+
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      RouteTableIds:
+        - !Ref PublicSubnetRouteTable
+      VpcEndpointType: Gateway
+
+  BedrockVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      SubnetIds:
+        - !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
 
 Outputs:
   S3BucketName:
@@ -272,3 +334,7 @@ Outputs:
   KnowledgeBaseHandlerLambdaName:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
+
+  # BedrockKnowledgeBaseArn:
+  #   Description: ARN of the Bedrock Knowledge Base
+  #   Value: !Ref BedrockKnowledgeBase
