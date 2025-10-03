@@ -365,26 +365,13 @@ Resources:
           DB_NAME: !Ref DBName
           REGION: us-east-1
 
-  ### S3 Bucket + Trigger
-  S3IngestBucket:
-    DeletionPolicy: Retain
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: bedrock-ingest-bucket
-      VersioningConfiguration:
-        Status: Enabled
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: 's3:ObjectCreated:*'
-            Function: !GetAtt IngestLambdaFunction.Arn
-
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref IngestLambdaFunction
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
-      SourceArn: !GetAtt S3IngestBucket.Arn
+      SourceArn: arn:aws:s3:::bedrock-ingest-bucket
       SourceAccount: !Ref AWS::AccountId
 
   ### VPC Endpoints for Private Subnet access
