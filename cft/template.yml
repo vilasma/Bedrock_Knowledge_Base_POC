@@ -422,20 +422,20 @@ Resources:
       KnowledgeBaseConfiguration:
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
-          StorageConfiguration:
-            RdsConfiguration:
-              ResourceArn: !GetAtt RDSCluster.DBClusterArn
-              CredentialsSecretArn: !Ref DBSecret
-              DatabaseName: !Ref DBName
-              TableName: document_chunks
-              FieldMapping:
-                PrimaryKeyField: document_id
-                VectorField: embedding_vector
-                MetadataFields:
-                  - tenant_id
-                  - user_id
-                  - project_id
-                  - thread_id
+      StorageConfiguration:
+        RdsConfiguration:
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
+          DatabaseName: !Ref DBName
+          TableName: document_chunks
+          FieldMapping:
+            PrimaryKeyField: document_id
+            VectorField: embedding_vector
+            MetadataFields:
+              - tenant_id
+              - user_id
+              - project_id
+              - thread_id
 
 Outputs:
   S3BucketName:
