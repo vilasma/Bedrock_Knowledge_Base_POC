@@ -80,7 +80,7 @@ def lambda_handler(event, context):
                 """
                 INSERT INTO document_chunks
                 (tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding_vector, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (tenant_id, user_id, document_id, project_id, thread_id, chunk, embedding, json.dumps(metadata_values))
             )
