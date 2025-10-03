@@ -43,6 +43,7 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
+  ### Public Subnet
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
@@ -54,6 +55,7 @@ Resources:
         - Key: Name
           Value: poc-public-subnet
 
+  ### Private Subnets
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -76,7 +78,7 @@ Resources:
         - Key: Name
           Value: poc-private-subnet-2
 
-  ### Route Table for public subnet (internet access)
+  ### Public Route Table
   PublicSubnetRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -98,13 +100,55 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
+  ### NAT Gateway for Private Subnets
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: poc-nat-gateway
+
+  ### Private Route Table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: poc-private-rt
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
   ### Security Groups
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow DB access from Lambda
       VpcId: !Ref VPC
-      SecurityGroupIngress: [] # managed below via separate ingress resource
 
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -112,7 +156,6 @@ Resources:
       GroupDescription: Lambda functions security group
       VpcId: !Ref VPC
 
-  # Allow Lambda -> RDS (5432)
   RDSSGIngressFromLambda:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -122,7 +165,6 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
-  # Lambda egress to anywhere on 443 (typically default allowed)
   LambdaSGEgressHTTPS:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
@@ -131,22 +173,6 @@ Resources:
       FromPort: 443
       ToPort: 443
       CidrIp: 0.0.0.0/0
-
-  ### Endpoint Security Group for interface endpoints
-  EndpointSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: SG for interface VPC endpoints (SecretsManager/Bedrock)
-      VpcId: !Ref VPC
-
-  EndpointIngressFromLambda:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref EndpointSecurityGroup
-      IpProtocol: tcp
-      FromPort: 443
-      ToPort: 443
-      SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
   ### Aurora PostgreSQL (multi-AZ)
   DBSubnetGroup:
@@ -178,7 +204,6 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref RDSSecurityGroup
       StorageEncrypted: true
-      EnableHttpEndpoint: true
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
@@ -218,6 +243,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - rds-db:connect
+                  - rds-data:ExecuteStatement
                 Resource: "*"
               - Effect: Allow
                 Action:
@@ -231,14 +257,9 @@ Resources:
                   - ec2:DeleteNetworkInterface
                 Resource: "*"
 
-  ### Init DB Lambda (depends on endpoints so ENIs resolve)
+  ### Lambda Functions (all in private subnets)
   InitDBLambda:
     Type: AWS::Lambda::Function
-    DependsOn:
-      - SecretsManagerVPCEndpoint
-      - BedrockVPCEndpoint
-      - EndpointSecurityGroup
-      - S3VPCEndpoint
     Properties:
       FunctionName: poc-init-db
       Runtime: python3.11
@@ -261,16 +282,10 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: !Ref AWS::Region
+          REGION: ap-south-1
 
-  ### Ingest Lambda
   IngestLambdaFunction:
     Type: AWS::Lambda::Function
-    DependsOn:
-      - SecretsManagerVPCEndpoint
-      - BedrockVPCEndpoint
-      - EndpointSecurityGroup
-      - S3VPCEndpoint
     Properties:
       FunctionName: poc-s3-ingest
       Runtime: python3.11
@@ -293,34 +308,11 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: !Ref AWS::Region
+          REGION: ap-south-1
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
 
-  ### S3 Bucket
-  S3IngestBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt IngestLambdaFunction.Arn
-
-  LambdaPermissionForS3:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref IngestLambdaFunction
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
-
-  ### Knowledge Base Handler Lambda
   KnowledgeBaseHandlerFunction:
     Type: AWS::Lambda::Function
-    DependsOn:
-      - SecretsManagerVPCEndpoint
-      - BedrockVPCEndpoint
-      - EndpointSecurityGroup
-      - S3VPCEndpoint
     Properties:
       FunctionName: poc-kb-handler
       Runtime: python3.11
@@ -343,102 +335,111 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: !Ref AWS::Region
+          REGION: ap-south-1
 
-  ### VPC Endpoints (Interface endpoints in private subnets + gateway for S3)
+  ### S3 Bucket + Trigger
+  S3IngestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt IngestLambdaFunction.Arn
+
+  LambdaPermissionForS3:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref IngestLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  ### VPC Endpoints for Private Subnet access
   SecretsManagerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
-      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
       SubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
       SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
-      PrivateDnsEnabled: true
-
-  BedrockVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.bedrock-runtime"
+        - !Ref LambdaSecurityGroup
       VpcEndpointType: Interface
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref EndpointSecurityGroup
-      PrivateDnsEnabled: true
 
   S3VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
       RouteTableIds:
-        - !Ref PublicSubnetRouteTable
+        - !Ref PrivateRouteTable
       VpcEndpointType: Gateway
-  
-  ### Bedrock Knowledge Base IAM Role 
+
+  BedrockVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
+
   BedrockKnowledgeBaseRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: bedrock.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: BedrockKnowledgeBaseAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - rds-db:connect
-                  - rds:DescribeDBClusters
-                  - rds:DescribeDBInstances
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref DBSecret
-              - Effect: Allow
-                Action:
-                  - rds-data:ExecuteStatement
-                  - rds-data:BatchExecuteStatement
-                  - rds-data:BeginTransaction
-                  - rds-data:CommitTransaction
-                  - rds-data:RollbackTransaction
-                Resource: !GetAtt RDSCluster.DBClusterArn
-  
-  ### Bedrock Knowledge Base
-  BedrockKnowledgeBase:
-    Type: AWS::Bedrock::KnowledgeBase
-    Properties:
-      Name: poc-bedrock-kb
-      Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
-      RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
-      KnowledgeBaseConfiguration:
-        Type: VECTOR
-        VectorKnowledgeBaseConfiguration:
-          EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
-      StorageConfiguration:
-        Type: RDS
-        RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn
-          CredentialsSecretArn: !Ref DBSecret
-          DatabaseName: !Ref DBName
-          TableName: document_chunks
-          FieldMapping:
-            PrimaryKeyField: id
-            VectorField: embedding
-            TextField: content
-            MetadataField: metadata
+  Type: AWS::IAM::Role
+  Properties:
+    RoleName: poc-bedrock-kb-role
+    AssumeRolePolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Principal:
+            Service: bedrock.amazonaws.com
+          Action: sts:AssumeRole
+    ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
+      - arn:aws:iam::aws:policy/AmazonSecretsManagerReadOnlyAccess
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    Policies:
+      - PolicyName: BedrockKBExtraPermissions
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+              Resource: "*"
+
+BedrockKnowledgeBase:
+  Type: AWS::Bedrock::KnowledgeBase
+  Properties:
+    Name: poc-bedrock-kb
+    Description: Knowledge Base for Aurora PostgreSQL ingestion PoC
+    RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
+    KnowledgeBaseConfiguration:
+      VectorKnowledgeBaseConfiguration:
+        VectorFieldName: embedding_vector
+        PrimaryKeyFieldName: id
+        FieldMappings:
+          - FieldName: tenant_id
+          - FieldName: user_id
+          - FieldName: document_id
+          - FieldName: project_id
+          - FieldName: thread_id
+        VectorDimension: 1024
+        VectorModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
+    StorageConfiguration:
+      RdsConfiguration:
+        CredentialsSecretArn: !Ref DBSecret
+        ResourceArn: !GetAtt RDSCluster.DBClusterArn
+        DatabaseName: !Ref DBName
+        TableName: document_chunks
+        FieldMapping:
+          PrimaryKeyField: id
+          VectorField: embedding_vector
 
 Outputs:
   S3BucketName:
@@ -472,3 +473,11 @@ Outputs:
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
     Value: !Ref BedrockKnowledgeBase
+
+  BedrockKnowledgeBaseName:
+    Description: Name of the Bedrock Knowledge Base
+    Value: !GetAtt BedrockKnowledgeBase.Name
+
+  BedrockKnowledgeBaseRoleArn:
+    Description: IAM Role ARN used by Bedrock Knowledge Base
+    Value: !GetAtt BedrockKnowledgeBaseRole.Arn

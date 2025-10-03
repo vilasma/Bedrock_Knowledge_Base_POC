@@ -1,0 +1,9 @@
+tenant_id: tenant_123
+user_id: user_456
+document_id: doc_001
+project_id: project_xyz
+thread_id: thread_01
+
+This is a test document for the Bedrock PoC. 
+It contains sample text that will be converted to embeddings
+and stored in the Aurora pgvector table.
