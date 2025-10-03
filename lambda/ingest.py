@@ -32,13 +32,13 @@ def get_db_credentials(secret_arn):
 # Generate embedding using Bedrock Titan Embeddings V2
 def get_embedding(text):
     response = bedrock_client.invoke_model(
-        modelId='amazon.titan-embed-text-v2',  # ✅ Correct key
+        modelId='amazon.titan-embed-text-v2:0',  # must include :0 suffix
         body=json.dumps({"inputText": text}),
         contentType='application/json',
         accept='application/json'
     )
     result = json.loads(response['body'].read())
-    return result['embedding']  # ✅ 1536-dim vector
+    return result['embedding']
 
 
 def lambda_handler(event, context):
