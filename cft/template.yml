@@ -354,16 +354,16 @@ Resources:
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
-          EmbeddingModelArn: arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1  # adjust to model you use
+          EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
           ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          DatabaseName: !Ref DBName
           FieldMapping:
             VectorField: embedding
             TextField: content
             MetadataField: metadata
-          DatabaseName: !Ref DBName
 
   ### VPC Endpoints (Interface endpoints in private subnets + gateway for S3)
   SecretsManagerVPCEndpoint:
