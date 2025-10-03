@@ -2,7 +2,6 @@ import os
 import json
 import boto3
 import psycopg2
-from psycopg2.extras import Json
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Environment variables
@@ -10,7 +9,7 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = int(os.environ['DB_PORT'])
 DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
-REGION = os.environ.get('REGION', 'us-east-1')  # Bedrock Titan model region
+REGION = os.environ.get('REGION', 'us-east-1')
 METADATA_FIELDS = os.environ.get(
     'METADATA_FIELDS',
     'tenant_id,user_id,document_id,project_id,thread_id'
@@ -18,21 +17,21 @@ METADATA_FIELDS = os.environ.get(
 
 # AWS clients
 s3_client = boto3.client('s3', region_name=REGION)
-bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)  # ✅ FIXED
+bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 
 
-# Get RDS credentials from Secrets Manager
 def get_db_credentials(secret_arn):
+    """Fetch RDS credentials from Secrets Manager"""
     secret = secrets_client.get_secret_value(SecretId=secret_arn)
     creds = json.loads(secret['SecretString'])
     return creds['username'], creds['password']
 
 
-# Generate embedding using Bedrock Titan Embeddings V2
 def get_embedding(text):
+    """Generate 1024-dimensional embedding using Bedrock Titan V2"""
     response = bedrock_client.invoke_model(
-        modelId='amazon.titan-embed-text-v2:0',  # must include :0 suffix
+        modelId='amazon.titan-embed-text-v2:0',
         body=json.dumps({"inputText": text}),
         contentType='application/json',
         accept='application/json'
@@ -45,44 +44,51 @@ def lambda_handler(event, context):
     # Connect to Aurora PostgreSQL
     username, password = get_db_credentials(DB_SECRET_ARN)
     conn = psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=username, password=password
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=username,
+        password=password
     )
     cur = conn.cursor()
-
     processed_files = 0
 
-    # Iterate S3 records
+    # Iterate over S3 event records
     for record in event.get('Records', []):
         bucket = record['s3']['bucket']['name']
         key = record['s3']['object']['key']
 
-        # Fetch S3 file content
+        # Fetch file content from S3
         obj = s3_client.get_object(Bucket=bucket, Key=key)
         text = obj['Body'].read().decode('utf-8')
 
-        # Split into chunks
+        # Split text into chunks
         splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
         chunks = splitter.split_text(text)
 
-        for chunk in chunks:
+        # Prepare metadata
+        metadata_values = {field.lower(): f"{field}_sample" for field in METADATA_FIELDS}
+        tenant_id = metadata_values.get('tenant_id')
+        user_id = metadata_values.get('user_id')
+        project_id = metadata_values.get('project_id')
+        thread_id = metadata_values.get('thread_id')
+
+        # Insert each chunk into DB with unique document_id
+        for i, chunk in enumerate(chunks):
+            document_id = f"{key}__chunk{i+1}"  # Unique per chunk
             embedding = get_embedding(chunk)
 
-            # Prepare metadata
-            metadata_values = {field.lower(): f"{field}_sample" for field in METADATA_FIELDS}
-            tenant_id = metadata_values.get('tenant_id')
-            user_id = metadata_values.get('user_id')
-            document_id = key  # Use S3 key as document_id
-            project_id = metadata_values.get('project_id')
-            thread_id = metadata_values.get('thread_id')
-
-            # Insert into Aurora
             cur.execute(
                 """
                 INSERT INTO document_chunks
                 (tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding_vector, metadata)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (tenant_id, user_id, document_id, project_id, thread_id, chunk, embedding, json.dumps(metadata_values))
+                (
+                    tenant_id, user_id, document_id,
+                    project_id, thread_id, chunk,
+                    embedding, json.dumps(metadata_values)
+                )
             )
 
         processed_files += 1
@@ -93,5 +99,5 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": f"Processed {processed_files} documents"
+        "body": f"Processed {processed_files} documents and inserted {len(chunks)} chunks per document"
     }
