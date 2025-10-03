@@ -1,0 +1,11 @@
+{
+    "Records": [
+      {
+        "s3": {
+          "bucket": { "name": "bedrock-poc-ingest-bucket" },
+          "object": { "key": "test.txt" }
+        }
+      }
+    ]
+  }
+  
