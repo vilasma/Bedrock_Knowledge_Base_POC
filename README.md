@@ -37,7 +37,7 @@ This Proof of Concept (PoC) demonstrates a pipeline that processes documents upl
 
 2. **Secrets**:
    - Add the following secrets to your GitHub repository:
-     - `AWS_REGION`: AWS region for deployment (e.g., `ap-south-1`).
+     - `AWS_REGION`: AWS region for deployment (e.g., `us-east-1`).
      - `AWS_ACCESS_KEY_ID`: AWS access key ID.
      - `AWS_SECRET_ACCESS_KEY`: AWS secret access key.
      - `CFN_CODE_BUCKET`: ARN of the S3 bucket for storing Lambda artifacts.

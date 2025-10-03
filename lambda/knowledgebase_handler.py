@@ -1,14 +1,14 @@
 import os
 import json
 import psycopg2
-import boto3
 from psycopg2.extras import RealDictCursor
+import boto3
 
 DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
+DB_PORT = int(os.environ['DB_PORT'])
 DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
-REGION = os.environ.get('REGION', 'ap-south-1')
+REGION = os.environ.get('REGION', 'us-east-1')
 
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 bedrock_client = boto3.client('bedrock', region_name=REGION)
@@ -19,24 +19,14 @@ def get_db_credentials(secret_arn):
     return creds['username'], creds['password']
 
 def get_query_embedding(query_text):
-    """Generate embedding using Bedrock Titan model"""
     response = bedrock_client.invoke_model(
         ModelId='amazon.titan-embed-text-v2',
-        Body=json.dumps({"text": query_text}),
+        Body=json.dumps({"inputText": query_text}),
         ContentType='application/json'
     )
-    embedding = json.loads(response['Body'].read())['embedding']
-    return embedding
+    return json.loads(response['Body'].read())['embedding']
 
 def lambda_handler(event, context):
-    """
-    Expected input:
-    {
-      "query_text": "search text",
-      "top_k": 5,
-      "metadata_filters": {"tenant_id": "tenant_123"}
-    }
-    """
     username, password = get_db_credentials(DB_SECRET_ARN)
     conn = psycopg2.connect(
         host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=username, password=password
@@ -47,17 +37,14 @@ def lambda_handler(event, context):
     top_k = event.get("top_k", 5)
     filters = event.get("metadata_filters", {})
 
-    sql = "SELECT id, tenant_id, user_id, document_id, project_id, thread_id, chunk_text, created_at"
-    sql += " FROM document_chunks WHERE 1=1"
+    sql = "SELECT tenant_id, user_id, document_id, project_id, thread_id, chunk_text FROM document_chunks WHERE 1=1"
     params = []
 
-    # Add metadata filters
+    # Apply metadata filters
     for key, value in filters.items():
-        if key.lower() in ['tenant_id','user_id','document_id','project_id','thread_id']:
-            sql += f" AND {key.lower()} = %s"
-            params.append(value)
+        sql += f" AND {key.lower()} = %s"
+        params.append(value)
 
-    # Vector similarity search
     if query_text:
         query_embedding = get_query_embedding(query_text)
         sql += " ORDER BY embedding <-> %s LIMIT %s"
@@ -71,7 +58,4 @@ def lambda_handler(event, context):
     cur.close()
     conn.close()
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps(rows, default=str)
-    }
+    return {"statusCode": 200, "body": json.dumps(rows, default=str)}

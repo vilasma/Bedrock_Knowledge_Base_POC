@@ -7,7 +7,7 @@ DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
-REGION = os.environ.get('REGION', 'ap-south-1')
+REGION = os.environ.get('REGION', 'us-east-1')
 
 def get_db_credentials(secret_arn):
     client = boto3.client('secretsmanager', region_name=REGION)
