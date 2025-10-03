@@ -389,57 +389,57 @@ Resources:
       VpcEndpointType: Interface
 
   BedrockKnowledgeBaseRole:
-  Type: AWS::IAM::Role
-  Properties:
-    RoleName: poc-bedrock-kb-role
-    AssumeRolePolicyDocument:
-      Version: '2012-10-17'
-      Statement:
-        - Effect: Allow
-          Principal:
-            Service: bedrock.amazonaws.com
-          Action: sts:AssumeRole
-    ManagedPolicyArns:
-      - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
-      - arn:aws:iam::aws:policy/AmazonSecretsManagerReadOnlyAccess
-      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-    Policies:
-      - PolicyName: BedrockKBExtraPermissions
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - rds-data:ExecuteStatement
-              Resource: "*"
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: poc-bedrock-kb-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
+        - arn:aws:iam::aws:policy/AmazonSecretsManagerReadOnlyAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockKBExtraPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                Resource: "*"
 
-BedrockKnowledgeBase:
-  Type: AWS::Bedrock::KnowledgeBase
-  Properties:
-    Name: poc-bedrock-kb
-    Description: Knowledge Base for Aurora PostgreSQL ingestion PoC
-    RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
-    KnowledgeBaseConfiguration:
-      VectorKnowledgeBaseConfiguration:
-        VectorFieldName: embedding_vector
-        PrimaryKeyFieldName: id
-        FieldMappings:
-          - FieldName: tenant_id
-          - FieldName: user_id
-          - FieldName: document_id
-          - FieldName: project_id
-          - FieldName: thread_id
-        VectorDimension: 1024
-        VectorModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
-    StorageConfiguration:
-      RdsConfiguration:
-        CredentialsSecretArn: !Ref DBSecret
-        ResourceArn: !GetAtt RDSCluster.DBClusterArn
-        DatabaseName: !Ref DBName
-        TableName: document_chunks
-        FieldMapping:
-          PrimaryKeyField: id
-          VectorField: embedding_vector
+  BedrockKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: poc-bedrock-kb
+      Description: Knowledge Base for Aurora PostgreSQL ingestion PoC
+      RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        VectorKnowledgeBaseConfiguration:
+          VectorFieldName: embedding_vector
+          PrimaryKeyFieldName: id
+          FieldMappings:
+            - FieldName: tenant_id
+            - FieldName: user_id
+            - FieldName: document_id
+            - FieldName: project_id
+            - FieldName: thread_id
+          VectorDimension: 1024
+          VectorModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
+      StorageConfiguration:
+        RdsConfiguration:
+          CredentialsSecretArn: !Ref DBSecret
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          DatabaseName: !Ref DBName
+          TableName: document_chunks
+          FieldMapping:
+            PrimaryKeyField: id
+            VectorField: embedding_vector
 
 Outputs:
   S3BucketName:
