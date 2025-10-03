@@ -465,10 +465,6 @@ Resources:
   #           MetadataField: metadata
 
 Outputs:
-  S3BucketName:
-    Description: Upload documents to this bucket
-    Value: !Ref S3IngestBucket
-
   RDSClusterEndpoint:
     Description: Aurora cluster endpoint
     Value: !GetAtt RDSCluster.Endpoint.Address
