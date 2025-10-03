@@ -185,11 +185,12 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: bedrock-poc-ingest-db-credentials
+      Name: bedrock-poc-ingest-db-creds
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
         GenerateStringKey: password
         PasswordLength: 20
+        ExcludeCharacters: '/@" '   # ✅ exclude invalid characters
 
   RDSCluster:
     Type: AWS::RDS::DBCluster
