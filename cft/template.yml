@@ -370,6 +370,7 @@ Resources:
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
+      BucketName: bedrock-ingest-bucket
       VersioningConfiguration:
         Status: Enabled
       NotificationConfiguration:
@@ -383,6 +384,7 @@ Resources:
       FunctionName: !Ref IngestLambdaFunction
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
+      SourceArn: !GetAtt S3IngestBucket.Arn
       SourceAccount: !Ref AWS::AccountId
 
   ### VPC Endpoints for Private Subnet access

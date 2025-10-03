@@ -65,7 +65,7 @@ def lambda_handler(event, context):
         text = raw_data.decode('utf-8', errors='ignore')  # ✅ ignore invalid bytes
 
         # Split text into chunks
-        splitter = RecursiveCharacterTextSplitter(chunk_size=850000, chunk_overlap=100)
+        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
         chunks = splitter.split_text(text)
 
         # Prepare metadata
