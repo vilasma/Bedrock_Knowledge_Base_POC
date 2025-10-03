@@ -52,18 +52,20 @@ def lambda_handler(event, context):
     )
     cur = conn.cursor()
     processed_files = 0
+    total_chunks = 0
 
     # Iterate over S3 event records
     for record in event.get('Records', []):
         bucket = record['s3']['bucket']['name']
         key = record['s3']['object']['key']
 
-        # Fetch file content from S3
+        # Fetch file content from S3 with safe decoding
         obj = s3_client.get_object(Bucket=bucket, Key=key)
-        text = obj['Body'].read().decode('utf-8')
+        raw_data = obj['Body'].read()
+        text = raw_data.decode('utf-8', errors='ignore')  # ✅ ignore invalid bytes
 
         # Split text into chunks
-        splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+        splitter = RecursiveCharacterTextSplitter(chunk_size=850000, chunk_overlap=100)
         chunks = splitter.split_text(text)
 
         # Prepare metadata
@@ -92,6 +94,7 @@ def lambda_handler(event, context):
             )
 
         processed_files += 1
+        total_chunks += len(chunks)
 
     conn.commit()
     cur.close()
@@ -99,5 +102,5 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": f"Processed {processed_files} documents and inserted {len(chunks)} chunks per document"
+        "body": f"Processed {processed_files} documents and inserted {total_chunks} chunks"
     }
