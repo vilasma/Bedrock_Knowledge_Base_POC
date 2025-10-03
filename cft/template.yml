@@ -210,6 +210,8 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref RDSSecurityGroup
       StorageEncrypted: true
+      Port: 5432
+      EnableHttpEndpoint: true
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
@@ -476,7 +478,7 @@ Outputs:
   KnowledgeBaseHandlerLambdaName:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
-    
+
   # BedrockKnowledgeBaseArn:
   #   Description: ARN of the Bedrock Knowledge Base
   #   Value: !Ref BedrockKnowledgeBase
