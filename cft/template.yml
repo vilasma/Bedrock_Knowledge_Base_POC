@@ -310,7 +310,6 @@ Resources:
 
   IngestLambdaFunction:
     Type: AWS::Lambda::Function
-    DependsOn: RDSClusterInstance  # ✅ Ensures DB is created before ingest Lambda
     Properties:
       FunctionName: poc-s3-ingest
       Runtime: python3.11
@@ -340,7 +339,6 @@ Resources:
 
   KnowledgeBaseHandlerFunction:
     Type: AWS::Lambda::Function
-    DependsOn: RDSClusterInstance # ✅ Ensures DB is created before KB handler Lambda
     Properties:
       FunctionName: poc-kb-handler
       Runtime: python3.11
@@ -455,7 +453,7 @@ Resources:
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn: 
-      - KnowledgeBaseHandlerFunction
+      - InitDBLambda
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
