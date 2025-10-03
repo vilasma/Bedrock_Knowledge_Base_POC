@@ -247,8 +247,11 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:GetObject
                   - s3:ListBucket
+                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
                 Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket/*
               - Effect: Allow
                 Action:
