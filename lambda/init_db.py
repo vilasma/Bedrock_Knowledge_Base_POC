@@ -47,7 +47,7 @@ def lambda_handler(event, context):
 
     -- Index for fast similarity search
     CREATE INDEX IF NOT EXISTS idx_document_embedding 
-    ON document_chunks USING ivfflat (embedding vector_l2_ops) 
+    ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) 
     WITH (lists = 100);
 
     -- Index on document_id for filtering
