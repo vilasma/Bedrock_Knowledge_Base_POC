@@ -248,11 +248,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket
+                Resource: !Sub arn:aws:s3:::bedrock-ingest-bucket
               - Effect: Allow
                 Action:
                   - s3:GetObject
-                Resource: !Sub arn:aws:s3:::bedrock-poc-ingest-bucket/*
+                Resource: !Sub arn:aws:s3:::bedrock-ingest-bucket/*
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -296,11 +296,11 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: bedrock-poc-ingest-bucket
+        S3Bucket: bedrock-ingest-bucket
         S3Key: lambda/init_db.zip
       Environment:
         Variables:
-          INPUT_S3_DIR: bedrock-poc-ingest-bucket
+          INPUT_S3_DIR: bedrock-ingest-bucket
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_CLUSTER_ARN: !Ref RDSCluster
@@ -324,11 +324,11 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: bedrock-poc-ingest-bucket
+        S3Bucket: bedrock-ingest-bucket
         S3Key: lambda/ingest.zip
       Environment:
         Variables:
-          INPUT_S3_DIR: bedrock-poc-ingest-bucket
+          INPUT_S3_DIR: bedrock-ingest-bucket
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           DB_CLUSTER_ARN: !Ref RDSCluster
@@ -353,11 +353,11 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: bedrock-poc-ingest-bucket
+        S3Bucket: bedrock-ingest-bucket
         S3Key: lambda/knowledgebase_handler.zip
       Environment:
         Variables:
-          INPUT_S3_DIR: bedrock-poc-ingest-bucket
+          INPUT_S3_DIR: bedrock-ingest-bucket
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           DB_CLUSTER_ARN: !Ref RDSCluster
