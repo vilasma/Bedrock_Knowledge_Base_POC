@@ -210,7 +210,7 @@ Resources:
                   - ec2:DeleteNetworkInterface
                 Resource: "*"
 
-  ### Init DB Lambda
+   ### Init DB Lambda
   InitDBLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -224,7 +224,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/init_db.zip
@@ -234,7 +235,7 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: ap-south-1
+          REGION: !Ref AWS::Region
 
   ### Ingest Lambda
   IngestLambdaFunction:
@@ -250,7 +251,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/ingest.zip
@@ -260,7 +262,7 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: ap-south-1
+          REGION: !Ref AWS::Region
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
 
   ### S3 Bucket
@@ -294,7 +296,8 @@ Resources:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
-          - !Ref PublicSubnet
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
       Code:
         S3Bucket: bedrock-poc-ingest-bucket
         S3Key: lambda/knowledgebase_handler.zip
@@ -304,7 +307,7 @@ Resources:
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: ap-south-1
+          REGION: !Ref AWS::Region
 
   ### Bedrock Knowledge Base
   # BedrockKnowledgeBase:
@@ -326,14 +329,27 @@ Resources:
   #           - project_id
   #           - thread_id
 
-  ### VPC Endpoints
+  ### VPC Endpoints (updated to use private subnets)
   SecretsManagerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
       ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
       SubnetIds:
-        - !Ref PublicSubnet
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
+
+  BedrockVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       SecurityGroupIds:
         - !Ref LambdaSecurityGroup
       VpcEndpointType: Interface
@@ -346,17 +362,6 @@ Resources:
       RouteTableIds:
         - !Ref PublicSubnetRouteTable
       VpcEndpointType: Gateway
-
-  BedrockVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
-      SubnetIds:
-        - !Ref PublicSubnet
-      SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      VpcEndpointType: Interface
 
 Outputs:
   S3BucketName:
