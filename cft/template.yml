@@ -409,7 +409,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite   # ✅ lets Bedrock read DB credentials
       Policies:
         - PolicyName: BedrockKBExtraPermissions
           PolicyDocument:
@@ -417,8 +417,13 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                Resource: "*"   # ✅ Bedrock needs to inspect your Aurora cluster
+              - Effect: Allow
+                Action:
                   - rds-data:ExecuteStatement
-                Resource: "*"
+                Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster/${RDSCluster}
 
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
