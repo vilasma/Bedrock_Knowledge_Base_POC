@@ -155,6 +155,9 @@ Resources:
     Properties:
       GroupDescription: Lambda functions security group
       VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
 
   RDSSGIngressFromLambda:
     Type: AWS::EC2::SecurityGroupIngress
@@ -165,14 +168,17 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
-  LambdaSGEgressHTTPS:
-    Type: AWS::EC2::SecurityGroupEgress
+  ### VPC Endpoint Security Group
+  VPCEndpointSG:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupId: !Ref LambdaSecurityGroup
-      IpProtocol: tcp
-      FromPort: 443
-      ToPort: 443
-      CidrIp: 0.0.0.0/0
+      GroupDescription: Security group for interface VPC endpoints
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
   ### Aurora PostgreSQL (multi-AZ)
   DBSubnetGroup:
@@ -257,7 +263,7 @@ Resources:
                   - ec2:DeleteNetworkInterface
                 Resource: "*"
 
-  ### Lambda Functions (all in private subnets)
+  ### Lambda Functions
   InitDBLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -278,6 +284,7 @@ Resources:
         S3Key: lambda/init_db.zip
       Environment:
         Variables:
+          INPUT_S3_DIR: bedrock-poc-ingest-bucket
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
@@ -304,6 +311,7 @@ Resources:
         S3Key: lambda/ingest.zip
       Environment:
         Variables:
+          INPUT_S3_DIR: bedrock-poc-ingest-bucket
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
@@ -331,6 +339,7 @@ Resources:
         S3Key: lambda/knowledgebase_handler.zip
       Environment:
         Variables:
+          INPUT_S3_DIR: bedrock-poc-ingest-bucket
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
@@ -364,17 +373,9 @@ Resources:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
       SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
+        - !Ref VPCEndpointSG
       VpcEndpointType: Interface
-
-  S3VPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
-      RouteTableIds:
-        - !Ref PrivateRouteTable
-      VpcEndpointType: Gateway
+      PrivateDnsEnabled: true
 
   BedrockVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -385,8 +386,18 @@ Resources:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
       SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
+        - !Ref VPCEndpointSG
       VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      VpcEndpointType: Gateway
 
   # BedrockKnowledgeBaseRole:
   #   Type: AWS::IAM::Role
@@ -401,7 +412,7 @@ Resources:
   #           Action: sts:AssumeRole
   #     ManagedPolicyArns:
   #       - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
-  #       - arn:aws:iam::aws:policy/AmazonSecretsManagerReadOnlyAccess
+  #       - arn:aws:iam::aws:policy/SecretsManagerReadOnly
   #       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
   #     Policies:
   #       - PolicyName: BedrockKBExtraPermissions
@@ -465,7 +476,7 @@ Outputs:
   KnowledgeBaseHandlerLambdaName:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
-
+    
   # BedrockKnowledgeBaseArn:
   #   Description: ARN of the Bedrock Knowledge Base
   #   Value: !Ref BedrockKnowledgeBase

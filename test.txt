@@ -1,9 +1,13 @@
-tenant_id: tenant_123
-user_id: user_456
+tenant_id: tenant_001
+user_id: user_123
 document_id: doc_001
-project_id: project_xyz
+project_id: project_alpha
 thread_id: thread_01
-
-This is a test document for the Bedrock PoC. 
-It contains sample text that will be converted to embeddings
-and stored in the Aurora pgvector table.
+title: Sample Document for PoC
+content: |
+  This is a sample document to test the AWS Bedrock ingestion pipeline.
+  The document contains multiple lines of text to simulate real-world content.
+  You can add additional paragraphs here to increase document size.
+  Each paragraph can represent a chunk that will be embedded into the vector database.
+  Metadata fields such as tenant_id, user_id, document_id, project_id, and thread_id
+  are required for filtering and retrieval in queries.
