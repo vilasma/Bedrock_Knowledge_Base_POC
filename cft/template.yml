@@ -359,8 +359,11 @@ Resources:
         Type: RDS
         RdsConfiguration:
           ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
+          TableName: document_chunks
           FieldMapping:
+            PrimaryKeyField: id
             VectorField: embedding
             TextField: content
             MetadataField: metadata
