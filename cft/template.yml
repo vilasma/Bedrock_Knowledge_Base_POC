@@ -394,6 +394,57 @@ Resources:
         - !Ref LambdaSecurityGroup
       VpcEndpointType: Interface
 
+  ### Bedrock Knowledge Base IAM Role
+  BedrockKnowledgeBaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: poc-bedrock-kb-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
+        - arn:aws:iam::aws:policy/SecretsManagerReadOnly
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockKBExtraPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                Resource: "*"
+
+  # BedrockKnowledgeBase:
+  #   Type: AWS::Bedrock::KnowledgeBase
+  #   Properties:
+  #     Name: poc-bedrock-kb
+  #     Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
+  #     RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
+  #     KnowledgeBaseConfiguration:
+  #       VectorKnowledgeBaseConfiguration:
+  #         EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
+  #     StorageConfiguration:
+  #       RdsConfiguration:
+  #         ResourceArn: !GetAtt RDSCluster.DBClusterArn
+  #         CredentialsSecretArn: !Ref DBSecret
+  #         DatabaseName: !Ref DBName
+  #         TableName: document_chunks
+  #         FieldMapping:
+  #           PrimaryKeyField: document_id
+  #           VectorField: embedding_vector
+  #           MetadataFields:
+  #             - tenant_id
+  #             - user_id
+  #             - project_id
+  #             - thread_id
+
+
 Outputs:
   S3BucketName:
     Description: Upload documents to this bucket
@@ -422,57 +473,6 @@ Outputs:
   KnowledgeBaseHandlerLambdaName:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
-
-
-  # BedrockKnowledgeBaseRole:
-  #   Type: AWS::IAM::Role
-  #   Properties:
-  #     RoleName: poc-bedrock-kb-role
-  #     AssumeRolePolicyDocument:
-  #       Version: '2012-10-17'
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             Service: bedrock.amazonaws.com
-  #           Action: sts:AssumeRole
-  #     ManagedPolicyArns:
-  #       - arn:aws:iam::aws:policy/AmazonRDSDataFullAccess
-  #       - arn:aws:iam::aws:policy/SecretsManagerReadOnly
-  #       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  #     Policies:
-  #       - PolicyName: BedrockKBExtraPermissions
-  #         PolicyDocument:
-  #           Version: '2012-10-17'
-  #           Statement:
-  #             - Effect: Allow
-  #               Action:
-  #                 - rds-data:ExecuteStatement
-  #               Resource: "*"
-
-  # BedrockKnowledgeBase:
-  #   Type: AWS::Bedrock::KnowledgeBase
-  #   Properties:
-  #     Name: poc-bedrock-kb
-  #     Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
-  #     RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
-  #     KnowledgeBaseConfiguration:
-  #       VectorKnowledgeBaseConfiguration:
-  #         EmbeddingModelArn: arn:aws:bedrock:ap-south-1::foundation-model/amazon.titan-embed-text-v1
-  #     StorageConfiguration:
-  #       RdsConfiguration:
-  #         ResourceArn: !GetAtt RDSCluster.DBClusterArn
-  #         CredentialsSecretArn: !Ref DBSecret
-  #         DatabaseName: !Ref DBName
-  #         TableName: document_chunks
-  #         FieldMapping:
-  #           PrimaryKeyField: document_id
-  #           VectorField: embedding_vector
-  #           MetadataFields:
-  #             - tenant_id
-  #             - user_id
-  #             - project_id
-  #             - thread_id
-
   # BedrockKnowledgeBaseArn:
   #   Description: ARN of the Bedrock Knowledge Base
   #   Value: !Ref BedrockKnowledgeBase
@@ -481,6 +481,6 @@ Outputs:
   #   Description: Name of the Bedrock Knowledge Base
   #   Value: !GetAtt BedrockKnowledgeBase.Name
 
-  # BedrockKnowledgeBaseRoleArn:
-  #   Description: IAM Role ARN used by Bedrock Knowledge Base
-  #   Value: !GetAtt BedrockKnowledgeBaseRole.Arn
+  BedrockKnowledgeBaseRoleArn:
+    Description: IAM Role ARN used by Bedrock Knowledge Base
+    Value: !GetAtt BedrockKnowledgeBaseRole.Arn
