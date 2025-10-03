@@ -209,6 +209,8 @@ Resources:
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       DBClusterIdentifier: !Ref RDSCluster
       DBInstanceClass: !Ref InstanceClass
