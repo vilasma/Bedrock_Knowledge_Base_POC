@@ -140,7 +140,7 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: poc-db-credentials
+      Name: bedrock-poc-ingest-db-credentials
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
         GenerateStringKey: password
