@@ -351,18 +351,19 @@ Resources:
       Name: poc-bedrock-kb
       Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
       RoleArn: !GetAtt LambdaExecutionRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1  # adjust to model you use
       StorageConfiguration:
+        Type: RDS
         RdsConfiguration:
-          ClusterArn: !GetAtt RDSCluster.DBClusterArn
-          CredentialsSecretArn: !Ref DBSecret
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          FieldMapping:
+            VectorField: embedding
+            TextField: content
+            MetadataField: metadata
           DatabaseName: !Ref DBName
-          TableName: document_chunks
-          MetadataFields:
-            - tenant_id
-            - user_id
-            - document_id
-            - project_id
-            - thread_id
 
   ### VPC Endpoints (Interface endpoints in private subnets + gateway for S3)
   SecretsManagerVPCEndpoint:
