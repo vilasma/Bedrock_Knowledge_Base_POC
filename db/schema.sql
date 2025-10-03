@@ -6,11 +6,12 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     id SERIAL PRIMARY KEY,
     tenant_id VARCHAR(128),
     user_id VARCHAR(128),
-    document_id VARCHAR(256),
+    document_id VARCHAR(256) UNIQUE,
     project_id VARCHAR(128),
     thread_id VARCHAR(128),
-    chunk_text TEXT,
-    embedding vector(1536),
+    chunks TEXT,
+    embedding_vector vector(1536),
+    metadata JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
