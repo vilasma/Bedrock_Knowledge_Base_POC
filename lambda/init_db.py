@@ -39,7 +39,7 @@ def lambda_handler(event, context):
         document_id VARCHAR(256) UNIQUE,
         project_id VARCHAR(128),
         thread_id VARCHAR(128),
-        chunks TEXT,
+        chunk_text TEXT,
         embedding_vector vector(1536),
         metadata JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -79,7 +79,7 @@ def lambda_handler(event, context):
             cur.execute(
                 """
                 INSERT INTO document_chunks
-                (tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding)
+                (tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding_vector)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (tenant_id, user_id, document_id, project_id, thread_id, chunk, embedding)
