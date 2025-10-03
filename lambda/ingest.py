@@ -71,7 +71,7 @@ def lambda_handler(event, context):
             metadata_values = {field.lower(): f"{field}_sample" for field in METADATA_FIELDS}
             tenant_id = metadata_values.get('tenant_id')
             user_id = metadata_values.get('user_id')
-            document_id = metadata_values.get('document_id', key)
+            document_id = key  # Use S3 key as document_id
             project_id = metadata_values.get('project_id')
             thread_id = metadata_values.get('thread_id')
 

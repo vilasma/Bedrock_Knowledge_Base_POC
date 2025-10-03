@@ -11,3 +11,13 @@ content: |
   Each paragraph can represent a chunk that will be embedded into the vector database.
   Metadata fields such as tenant_id, user_id, document_id, project_id, and thread_id
   are required for filtering and retrieval in queries.
+  ---
+  This is the second paragraph to simulate multiple chunks.
+  Adding more sentences here helps test the text splitting functionality.
+  The embedding should capture the semantic meaning of each chunk.
+  This paragraph will also be stored in the `chunk_text` column.
+  ---
+  Final paragraph to complete the sample document.
+  This ensures the ingestion Lambda handles multiple chunks correctly.
+  Once ingested, you should see multiple rows in the `document_chunks` table
+  with corresponding embeddings and metadata.
