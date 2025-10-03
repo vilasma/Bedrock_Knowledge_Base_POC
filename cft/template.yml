@@ -429,6 +429,6 @@ Outputs:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
 
-  # BedrockKnowledgeBaseArn:
-  #   Description: ARN of the Bedrock Knowledge Base
-  #   Value: !Ref BedrockKnowledgeBase
+  BedrockKnowledgeBaseArn:
+    Description: ARN of the Bedrock Knowledge Base
+    Value: !Ref BedrockKnowledgeBase
