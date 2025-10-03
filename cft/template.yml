@@ -178,6 +178,7 @@ Resources:
       VpcSecurityGroupIds:
         - !Ref RDSSecurityGroup
       StorageEncrypted: true
+      EnableHttpEndpoint: true
 
   RDSClusterInstance:
     Type: AWS::RDS::DBInstance
@@ -406,6 +407,14 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref DBSecret
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !GetAtt RDSCluster.DBClusterArn
   
   ### Bedrock Knowledge Base
   BedrockKnowledgeBase:
