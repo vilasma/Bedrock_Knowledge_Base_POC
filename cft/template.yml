@@ -173,6 +173,15 @@ Resources:
       ToPort: 443
       CidrIp: 0.0.0.0/0
 
+  LambdaSGEgressToRDS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref LambdaSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      DestinationSecurityGroupId: !Ref RDSSecurityGroup
+
   ### Aurora PostgreSQL (multi-AZ) with Data API
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -269,6 +278,7 @@ Resources:
   ### Lambda Functions (all in private subnets)
   InitDBLambda:
     Type: AWS::Lambda::Function
+    DependsOn: RDSClusterInstance   # ✅ Ensures DB is created before init Lambda
     Properties:
       FunctionName: poc-init-db
       Runtime: python3.11
