@@ -76,6 +76,7 @@ Resources:
         - Key: Name
           Value: poc-private-subnet-2
 
+  ### Route Table for public subnet (internet access)
   PublicSubnetRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -103,6 +104,7 @@ Resources:
     Properties:
       GroupDescription: Allow DB access from Lambda
       VpcId: !Ref VPC
+      SecurityGroupIngress: [] # managed below via separate ingress resource
 
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -110,6 +112,7 @@ Resources:
       GroupDescription: Lambda functions security group
       VpcId: !Ref VPC
 
+  # Allow Lambda -> RDS (5432)
   RDSSGIngressFromLambda:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -119,6 +122,7 @@ Resources:
       ToPort: 5432
       SourceSecurityGroupId: !Ref LambdaSecurityGroup
 
+  # Lambda egress to anywhere on 443 (typically default allowed)
   LambdaSGEgressHTTPS:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
@@ -128,7 +132,23 @@ Resources:
       ToPort: 443
       CidrIp: 0.0.0.0/0
 
-  ### Aurora PostgreSQL
+  ### Endpoint Security Group for interface endpoints
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG for interface VPC endpoints (SecretsManager/Bedrock)
+      VpcId: !Ref VPC
+
+  EndpointIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EndpointSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  ### Aurora PostgreSQL (multi-AZ)
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -210,9 +230,14 @@ Resources:
                   - ec2:DeleteNetworkInterface
                 Resource: "*"
 
-   ### Init DB Lambda
+  ### Init DB Lambda (depends on endpoints so ENIs resolve)
   InitDBLambda:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - SecretsManagerVPCEndpoint
+      - BedrockVPCEndpoint
+      - EndpointSecurityGroup
+      - S3VPCEndpoint
     Properties:
       FunctionName: poc-init-db
       Runtime: python3.11
@@ -240,6 +265,11 @@ Resources:
   ### Ingest Lambda
   IngestLambdaFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - SecretsManagerVPCEndpoint
+      - BedrockVPCEndpoint
+      - EndpointSecurityGroup
+      - S3VPCEndpoint
     Properties:
       FunctionName: poc-s3-ingest
       Runtime: python3.11
@@ -285,6 +315,11 @@ Resources:
   ### Knowledge Base Handler Lambda
   KnowledgeBaseHandlerFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - SecretsManagerVPCEndpoint
+      - BedrockVPCEndpoint
+      - EndpointSecurityGroup
+      - S3VPCEndpoint
     Properties:
       FunctionName: poc-kb-handler
       Runtime: python3.11
@@ -309,56 +344,58 @@ Resources:
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: !Ref AWS::Region
 
-  ### Bedrock Knowledge Base
-  # BedrockKnowledgeBase:
-  #   Type: AWS::Bedrock::KnowledgeBase
-  #   Properties:
-  #     Name: poc-bedrock-kb
-  #     Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
-  #     RoleArn: !GetAtt LambdaExecutionRole.Arn
-  #     StorageConfiguration:
-  #       RdsConfiguration:
-  #         ClusterArn: !GetAtt RDSCluster.DBClusterArn
-  #         CredentialsSecretArn: !Ref DBSecret
-  #         DatabaseName: !Ref DBName
-  #         TableName: document_chunks
-  #         MetadataFields:
-  #           - tenant_id
-  #           - user_id
-  #           - document_id
-  #           - project_id
-  #           - thread_id
+  ### Bedrock Knowledge Base (commented out — create after DB/table exists)
+  BedrockKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: poc-bedrock-kb
+      Description: Knowledge Base for Aurora PostgreSQL (pgvector) ingestion PoC
+      RoleArn: !GetAtt LambdaExecutionRole.Arn
+      StorageConfiguration:
+        RdsConfiguration:
+          ClusterArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
+          DatabaseName: !Ref DBName
+          TableName: document_chunks
+          MetadataFields:
+            - tenant_id
+            - user_id
+            - document_id
+            - project_id
+            - thread_id
 
-  ### VPC Endpoints (updated to use private subnets)
+  ### VPC Endpoints (Interface endpoints in private subnets + gateway for S3)
   SecretsManagerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
+      VpcEndpointType: Interface
       SubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
       SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      VpcEndpointType: Interface
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
 
   BedrockVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.bedrock-runtime"
+      VpcEndpointType: Interface
       SubnetIds:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
       SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      VpcEndpointType: Interface
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
 
   S3VPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       RouteTableIds:
         - !Ref PublicSubnetRouteTable
       VpcEndpointType: Gateway
