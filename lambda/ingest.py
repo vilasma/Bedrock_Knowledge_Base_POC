@@ -6,7 +6,6 @@ import psycopg2
 import chardet
 import pdfplumber
 import docx
-import cryptography
 from datetime import datetime
 
 # ------------------ Environment Variables ------------------
