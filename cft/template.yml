@@ -504,11 +504,11 @@ Outputs:
   
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
-    Value: !Ref BedrockKnowledgeBase
+    Value: !Ref BedrockKnowledgeBase.KnowledgeBaseArn
 
   BedrockKnowledgeBaseId:
     Description: Name of the Bedrock Knowledge Base
-    Value: !GetAtt BedrockKnowledgeBase
+    Value: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
 
   BedrockKnowledgeBaseRoleArn:
     Description: IAM Role ARN used by Bedrock Knowledge Base
