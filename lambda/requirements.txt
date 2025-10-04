@@ -13,3 +13,4 @@ python-docx
 lxml
 pillow
 typing_extensions
+six

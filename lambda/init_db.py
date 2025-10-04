@@ -39,6 +39,7 @@ def lambda_handler(event, context):
         tenant_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         project_id TEXT,
+        document_name TEXT NOT NULL,
         thread_id TEXT,
         status TEXT NOT NULL DEFAULT 'not-started', -- not-started | in-progress | completed
         created_at TIMESTAMP DEFAULT NOW(),
