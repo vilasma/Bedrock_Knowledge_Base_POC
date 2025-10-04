@@ -454,7 +454,7 @@ Resources:
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          ResourceArn: !Sub arn:aws:rds:us-east-1:${AWS::AccountId}:cluster/${RDSCluster}
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: "document_chunks"
