@@ -7,3 +7,4 @@ pdfminer.six
 requests
 chardet
 pdfplumber
+cryptography
