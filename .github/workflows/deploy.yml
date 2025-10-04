@@ -40,10 +40,10 @@ jobs:
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/lambda-layer amazonlinux:2 /bin/bash -c "
             yum update -y
-            yum install -y gcc libffi-devel bzip2 bzip2-devel xz xz-devel make wget zip tar
+            yum install -y gcc libffi-devel bzip2 bzip2-devel xz xz-devel make wget zip gzip tar
             cd /tmp
             wget https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz
-            tar xvf Python-3.11.9.tgz
+            tar xzf Python-3.11.9.tgz
             cd Python-3.11.9
             ./configure --enable-optimizations --prefix=/usr/local
             make -j$(nproc)
