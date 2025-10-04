@@ -26,47 +26,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install zip and wget
-        run: sudo apt-get update && sudo apt-get install -y zip wget build-essential
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-      # ------------------ Build Lambda layer (Python 3.11 + numpy + other deps) ------------------
-      - name: Build Lambda layer
+      - name: Install zip and wget
+        run: sudo apt-get update && sudo apt-get install -y zip wget
+
+      # ------------------ Build Lambda layer (Amazon Linux 2) ------------------
+      - name: Build Lambda layer (numpy, cryptography, psycopg2-binary, cffi, pgvector)
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
-            set -e
-
-            # Install build dependencies including OpenSSL for ssl module
-            yum update -y
-            yum groupinstall -y 'Development Tools'
-            yum install -y gcc gcc-c++ make wget tar gzip zip \
-                libffi-devel postgresql-devel \
-                bzip2 bzip2-devel xz-devel zlib-devel \
-                openssl-devel
-
-            # Build Python 3.11 from source
-            cd /tmp
-            wget https://www.python.org/ftp/python/3.11.10/Python-3.11.10.tgz
-            tar xvf Python-3.11.10.tgz
-            cd Python-3.11.10
-            ./configure --enable-optimizations --with-ensurepip=install
-            make -j$(nproc)
-            make altinstall   # installs python3.11
-
-            python3.11 --version
-
-            # Prepare Lambda layer folder
-            mkdir -p /var/task/python
-
-            # Install packages into layer folder
-            python3.11 -m ensurepip
-            python3.11 -m pip install --upgrade pip setuptools wheel
-            python3.11 -m pip install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t /var/task/python
-
-            # Create zip
-            cd /var/task
+            yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
+            python3.11 -m pip install --upgrade pip
+            mkdir -p python
+            pip3 install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t python
             zip -r ingest-dependencies-layer.zip python
-            ls -lh ingest-dependencies-layer.zip
+            mv ingest-dependencies-layer.zip /var/task/
           "
 
       # ------------------ Publish Lambda layer ------------------
@@ -84,23 +62,29 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # ------------------ Prepare Lambda packages ------------------
+      # ------------------ Package all Lambdas ------------------
       - name: Prepare Lambda packages
         run: |
           mkdir -p package
 
-          # Copy all Python files from lambda/ to package/
-          cp lambda/*.py package/
-
-          # Install lightweight dependencies (excluding numpy)
+          # ---------------- Ingest Lambda ----------------
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
-
-          # Create zips for all Lambdas
+          cp lambda/*.py ./package/
           pushd package
-          zip -r ../ingest.zip *
-          zip -r ../knowledgebase_handler.zip *
-          zip -r ../init_db.zip *
+          zip -r ../ingest.zip .
+          popd
+
+          # ---------------- Knowledge Base Handler Lambda ----------------
+          cp lambda/*.py ./package/
+          pushd package
+          zip -r ../knowledgebase_handler.zip .
+          popd
+
+          # ---------------- init_db Lambda ----------------
+          cp lambda/*.py ./package/
+          pushd package
+          zip -r ../init_db.zip .
           popd
 
       # ------------------ Upload Lambda artifacts ------------------
