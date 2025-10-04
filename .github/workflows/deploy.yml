@@ -75,6 +75,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
 
+          # Remove any leftover numpy folder if present
+          rm -rf package/numpy
+
           # Create zips for each Lambda
           pushd package
           zip -r ../ingest.zip *
