@@ -20,7 +20,7 @@ def get_db_credentials(secret_arn):
 
 def get_query_embedding(query_text):
     response = bedrock_client.invoke_model(
-        ModelId='amazon.titan-embed-text-v2',
+        ModelId='amazon.titan-embed-text-v1',
         Body=json.dumps({"inputText": query_text}),
         ContentType='application/json'
     )
