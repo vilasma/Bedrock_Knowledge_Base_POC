@@ -32,7 +32,7 @@ def get_db_credentials(secret_arn):
 def get_embedding(text):
     """Generate 1024-dimensional embedding using Bedrock Titan V2"""
     response = bedrock_client.invoke_model(
-        modelId='amazon.titan-embed-text-v1',
+        modelId='amazon.titan-embed-text-v2:0',
         body=json.dumps({"inputText": text}),
         contentType='application/json',
         accept='application/json'
@@ -75,14 +75,14 @@ def lambda_handler(event, context):
         user_id = metadata_values.get('user_id')
         project_id = metadata_values.get('project_id')
         thread_id = metadata_values.get('thread_id')
+        # Keep the original file/key as document_name
+        document_name = key  # original S3 key
 
         # Insert each chunk into DB with unique document_id
         for i, chunk in enumerate(chunks):
             # Generate a UUID for document_id
             document_id = str(uuid.uuid4())
 
-            # Keep the original file/key as document_name
-            document_name = key  # original S3 key
             embedding = get_embedding(chunk)
 
             cur.execute(
