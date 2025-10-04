@@ -17,6 +17,10 @@ on:
 jobs:
   package-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     steps:
       - name: Checkout
@@ -30,7 +34,7 @@ jobs:
       - name: Install zip
         run: sudo apt-get update && sudo apt-get install -y zip
 
-      # ------------------ Build Lambda layer ------------------
+      # ------------------ Build Lambda Layer ------------------
       - name: Build Lambda layer (cryptography + psycopg2-binary)
         run: |
           mkdir -p layer_build
@@ -42,17 +46,26 @@ jobs:
             mkdir -p /lambda-layer/python
             python3.11 -m pip install cryptography psycopg2-binary -t /lambda-layer/python
             cd /lambda-layer
-            zip -r9 /lambda-layer/ingest-dependencies-layer.zip python
+            if [ ! -d python ] || [ -z \"$(ls -A python)\" ]; then
+              echo 'ERROR: Layer python directory is empty'
+              exit 1
+            fi
+            zip -r9 ingest-dependencies-layer.zip python
           "
 
-      - name: Upload Lambda layer to S3
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Publish Lambda layer
+        id: publish_layer
         run: |
-          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
-          aws s3 cp layer_build/ingest-dependencies-layer.zip s3://$BUCKET_NAME/lambda/ingest-dependencies-layer.zip --region $AWS_REGION
+          LAYER_ARN=$(aws lambda publish-layer-version \
+            --layer-name ingest-dependencies-layer \
+            --description "Dependencies for ingest Lambda" \
+            --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
+            --compatible-runtimes python3.11 \
+            --region $AWS_REGION \
+            --query 'LayerVersionArn' \
+            --output text)
+          echo "Layer ARN: $LAYER_ARN"
+          echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
       # ------------------ Package ingest Lambda ------------------
       - name: Prepare ingest Lambda package
@@ -85,38 +98,22 @@ jobs:
 
       # ------------------ Upload Lambda artifacts ------------------
       - name: Upload ingest Lambda artifact to S3
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp ingest.zip s3://$BUCKET_NAME/lambda/ingest.zip --region $AWS_REGION
 
       - name: Upload Knowledge Base Handler artifact to S3
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp knowledgebase_handler.zip s3://$BUCKET_NAME/lambda/knowledgebase_handler.zip --region $AWS_REGION
 
       - name: Upload init_db Lambda artifact to S3
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp init_db.zip s3://$BUCKET_NAME/lambda/init_db.zip --region $AWS_REGION
 
       # ------------------ Deploy CloudFormation ------------------
       - name: Deploy CloudFormation
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws cloudformation deploy \
             --template-file cft/template.yml \
@@ -125,6 +122,7 @@ jobs:
             --parameter-overrides \
               IngestLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
               IngestLambdaS3Key=lambda/ingest.zip \
+              IngestLambdaLayerArn=$LAYER_ARN \
               KnowledgeBaseHandlerS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
               KnowledgeBaseHandlerS3Key=lambda/knowledgebase_handler.zip \
               InitDBLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
