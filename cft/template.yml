@@ -454,7 +454,7 @@ Resources:
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
-          EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2
+          EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
       StorageConfiguration:
         Type: RDS
         RdsConfiguration:
