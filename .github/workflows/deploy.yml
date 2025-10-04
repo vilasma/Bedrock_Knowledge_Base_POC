@@ -48,11 +48,11 @@ jobs:
             ./configure --enable-optimizations --prefix=/usr/local
             make -j$(nproc)
             make altinstall
-            python3 --version
-            python3 -m ensurepip
-            python3 -m pip install --upgrade pip
+            python3.11 --version
+            python3.11 -m ensurepip
+            python3.11 -m pip install --upgrade pip
             mkdir -p /lambda-layer/python
-            python3 -m pip install cryptography psycopg2-binary -t /lambda-layer/python
+            python3.11 -m pip install cryptography psycopg2-binary -t /lambda-layer/python
             cd /lambda-layer
             if [ ! -d python ] || [ -z \"$(ls -A python)\" ]; then
               echo 'ERROR: Layer python directory is empty'
