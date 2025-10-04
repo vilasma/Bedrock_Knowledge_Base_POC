@@ -437,6 +437,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
                 Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster/${RDSCluster}
 
   BedrockKnowledgeBase:
