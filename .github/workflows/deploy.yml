@@ -34,16 +34,17 @@ jobs:
       - name: Install zip and wget
         run: sudo apt-get update && sudo apt-get install -y zip wget
 
-      # ------------------ Build Lambda layer (Amazon Linux 2) ------------------
+      # ------------------ Build Lambda layer (Amazon Linux 2023) ------------------
       - name: Build Lambda layer (cryptography, psycopg2-binary, cffi, pgvector)
         run: |
           mkdir -p layer_build
-          docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
-            yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
-            python3.11 -m pip install --upgrade pip
+          docker run --rm -v $PWD/layer_build:/var/task public.ecr.aws/amazonlinux/amazonlinux:2023 /bin/bash -c "
+            dnf install -y python3 python3-pip zip gcc libffi-devel postgresql-devel
+            python3 -m pip install --upgrade pip
             mkdir -p python
             pip3 install cryptography psycopg2-binary cffi pgvector -t python
             zip -r ingest-dependencies-layer.zip python
+            ls -l ingest-dependencies-layer.zip  # verify non-empty zip
             mv ingest-dependencies-layer.zip /var/task/
           "
 
@@ -62,32 +63,26 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # ------------------ Package all Lambdas ------------------
+      # ------------------ Prepare Lambda packages ------------------
       - name: Prepare Lambda packages
         run: |
           mkdir -p package
 
-          # ---------------- Ingest Lambda ----------------
+          # Copy all Python files from lambda/ to package/
+          cp lambda/*.py package/
+
+          # Optional: install lightweight dependencies (excluding numpy)
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
-          cp lambda/*.py ./package/
+
+          # Create zips for each Lambda
           pushd package
-          zip -r ../ingest.zip .
+          zip -r ../ingest.zip *
+          zip -r ../knowledgebase_handler.zip *
+          zip -r ../init_db.zip *
           popd
 
-          # ---------------- Knowledge Base Handler Lambda ----------------
-          cp lambda/*.py ./package/
-          pushd package
-          zip -r ../knowledgebase_handler.zip .
-          popd
-
-          # ---------------- init_db Lambda ----------------
-          cp lambda/*.py ./package/
-          pushd package
-          zip -r ../init_db.zip .
-          popd
-
-      # ------------------ Upload Lambda artifacts ------------------
+      # ------------------ Upload Lambda artifacts to S3 ------------------
       - name: Upload Lambda artifacts to S3
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')

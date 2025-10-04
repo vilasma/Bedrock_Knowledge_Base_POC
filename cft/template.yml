@@ -489,7 +489,7 @@ Resources:
         S3Configuration:
           BucketArn: arn:aws:s3:::bedrock-ingest-bucket
           InclusionPrefixes:
-            - "lambda/"
+            - "bedrock-poc-docs/"
 
 Outputs:
   RDSClusterEndpoint:
