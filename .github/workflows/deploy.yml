@@ -73,22 +73,16 @@ jobs:
           cp lambda/ingest.py ./package/
           pushd package
           zip -r ../ingest.zip .
-          popd
-          rm -rf package/*
 
           # Knowledge Base Handler Lambda
           cp lambda/knowledgebase_handler.py ./package/
           pushd package
           zip -r ../knowledgebase_handler.zip .
-          popd
-          rm -rf package/*
 
           # init_db Lambda
           cp lambda/init_db.py ./package/
           pushd package
           zip -r ../init_db.zip .
-          popd
-          rm -rf package/*
 
       # ------------------ Upload Lambda artifacts ------------------
       - name: Upload Lambda artifacts to S3
