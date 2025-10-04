@@ -206,7 +206,8 @@ Resources:
     Type: AWS::RDS::DBCluster
     Properties:
       Engine: aurora-postgresql
-      EngineVersion: "15.3"
+      EngineVersion: "15.5"   # ✅ Upgrade target (must support pgvector >=0.5.0)
+      AllowMajorVersionUpgrade: true
       DatabaseName: !Ref DBName
       MasterUsername: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:username}}"]]
       MasterUserPassword: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:password}}"]]
@@ -215,6 +216,7 @@ Resources:
         - !Ref RDSSecurityGroup
       StorageEncrypted: true
       Port: 5432
+      DeletionProtection: false
       EnableHttpEndpoint: true   # ✅ Enables RDS Data API
 
   RDSClusterInstance:
