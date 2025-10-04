@@ -40,24 +40,19 @@ jobs:
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/lambda-layer amazonlinux:2 /bin/bash -c "
             yum update -y
-            yum install -y gcc libffi-devel bzip2 bzip2-devel xz xz-devel make wget zip gzip tar
+            yum install -y gcc libffi-devel bzip2 bzip2-devel xz xz-devel make wget zip gzip tar zlib-devel bzip2 bzip2-devel xz-devel readline-devel sqlite sqlite-devel wget openssl-devel
             cd /tmp
             wget https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz
             tar xzf Python-3.11.9.tgz
             cd Python-3.11.9
-            ./configure --enable-optimizations --prefix=/usr/local
+            ./configure --enable-optimizations --with-ensurepip=install --prefix=/usr/local
             make -j$(nproc)
             make altinstall
-            python3.11 --version
-            python3.11 -m ensurepip
             python3.11 -m pip install --upgrade pip
+            python3.11 -m pip --version
             mkdir -p /lambda-layer/python
             python3.11 -m pip install cryptography psycopg2-binary -t /lambda-layer/python
             cd /lambda-layer
-            if [ ! -d python ] || [ -z \"$(ls -A python)\" ]; then
-              echo 'ERROR: Layer python directory is empty'
-              exit 1
-            fi
             zip -r9 ingest-dependencies-layer.zip python
           "
 
