@@ -40,10 +40,26 @@ ALTER TABLE document_chunks
 ADD CONSTRAINT document_id_unique UNIQUE (document_id);
 
 ALTER TABLE document_chunks
-ALTER COLUMN embedding_vector TYPE vector(1024);
+ALTER COLUMN embedding_vector TYPE vector(1536);
 
 SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 
 ALTER EXTENSION vector UPDATE;
 
 select document_name, document_id, chunk_text from document_chunks limit 1000;
+
+
+drop table document_chunks;
+
+drop INDEX IF EXISTS idx_documents_embedding;
+
+drop INDEX IF EXISTS idx_document_chunks_chunk_text;
+
+drop INDEX IF EXISTS idx_document_id;
+
+drop INDEX IF EXISTS idx_document_embedding;
+
+drop INDEX IF EXISTS vector;
+
+drop EXTENSION IF EXISTS vector;
+drop EXTENSION IF EXISTS pgcrypto;

@@ -16,6 +16,7 @@ def get_db_credentials(secret_arn):
     return creds['username'], creds['password']
 
 def lambda_handler(event, context):
+    # Get DB credentials from Secrets Manager
     username, password = get_db_credentials(DB_SECRET_ARN)
 
     conn = psycopg2.connect(
@@ -27,58 +28,53 @@ def lambda_handler(event, context):
     )
     cur = conn.cursor()
 
-    create_table_query = """
-    -- Create extension for vector operations
+    create_tables_query = """
+    -- Enable vector extension for embeddings
     CREATE EXTENSION IF NOT EXISTS vector;
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-    -- Create table for chunks (run once after DB is reachable)
-    CREATE TABLE IF NOT EXISTS document_chunks (
-        id SERIAL PRIMARY KEY,
-        tenant_id VARCHAR(128),
-        user_id VARCHAR(128),
-        document_id UUID UNIQUE DEFAULT gen_random_uuid(),
-        document_name VARCHAR(256),
-        project_id VARCHAR(128),
-        thread_id VARCHAR(128),
-        chunk_text TEXT,
-        embedding_vector vector(1024),
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    -- Document-level table
+    CREATE TABLE IF NOT EXISTS documents (
+        document_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        project_id TEXT,
+        thread_id TEXT,
+        status TEXT NOT NULL DEFAULT 'not-started', -- not-started | in-progress | completed
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
     );
 
-    -- Index for fast similarity search
-    CREATE INDEX IF NOT EXISTS idx_document_embedding 
-    ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) 
-    WITH (lists = 100);
+    -- Chunk-level table
+    CREATE TABLE IF NOT EXISTS document_chunks (
+        chunk_id SERIAL PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES documents(document_id),
+        chunk_index INT NOT NULL,
+        chunk_text TEXT NOT NULL,
+        embedding_vector VECTOR(1536) NOT NULL,
+        metadata JSONB,
+        status TEXT NOT NULL DEFAULT 'not-started', -- optional chunk-level status
+        created_at TIMESTAMP DEFAULT NOW()
+    );
 
-    -- Index on document_id for filtering
-    CREATE INDEX IF NOT EXISTS idx_document_id 
+    -- Indexes for efficient search
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding
+    ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) WITH (lists = 100);
+
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id
     ON document_chunks(document_id);
 
-    -- Create GIN index for full-text search
-    DO $$
-    BEGIN
-        IF NOT EXISTS (
-            SELECT 1
-            FROM pg_class c
-            JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE c.relname = 'idx_document_chunks_chunk_text'
-        ) THEN
-            CREATE INDEX idx_document_chunks_chunk_text
-            ON document_chunks USING gin (to_tsvector('simple', chunk_text));
-        END IF;
-    END$$;
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_chunk_text
+    ON document_chunks USING gin (to_tsvector('simple', chunk_text));
 
-    -- Create HNSW index required by Bedrock
-    CREATE INDEX IF NOT EXISTS idx_documents_embedding
-    ON document_chunks
-    USING hnsw (embedding_vector vector_cosine_ops);
+    -- HNSW index (for Bedrock compatibility)
+    CREATE INDEX IF NOT EXISTS idx_document_chunks_hnsw
+    ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
     """
 
-    cur.execute(create_table_query)
+    cur.execute(create_tables_query)
     conn.commit()
     cur.close()
     conn.close()
 
-    return {"statusCode": 200, "body": "Table created successfully"}
+    return {"statusCode": 200, "body": "Tables 'documents' and 'document_chunks' created successfully"}
