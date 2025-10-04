@@ -34,26 +34,26 @@ jobs:
       - name: Install zip and wget
         run: sudo apt-get update && sudo apt-get install -y zip wget
 
-      # ------------------ Build Lambda Layer ------------------
-      - name: Build Lambda layer (cryptography + psycopg2-binary) in Amazon Linux 2
+      # ------------------ Build Lambda layer (Amazon Linux 2) ------------------
+      - name: Build Lambda layer (numpy, cryptography, psycopg2-binary, cffi, pgvector)
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
             yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
             python3.11 -m pip install --upgrade pip
             mkdir -p python
-            pip3 install cryptography psycopg2-binary cffi pgvector numpy -t python
+            pip3 install numpy cryptography psycopg2-binary cffi pgvector -t python
             zip -r ingest-dependencies-layer.zip python
             mv ingest-dependencies-layer.zip /var/task/
           "
 
-      # ------------------ Publish Lambda Layer ------------------
+      # ------------------ Publish Lambda layer ------------------
       - name: Publish Lambda layer
         id: publish_layer
         run: |
           LAYER_ARN=$(aws lambda publish-layer-version \
             --layer-name ingest-dependencies-layer \
-            --description "Dependencies for ingest Lambda" \
+            --description "Dependencies for all PoC Lambdas" \
             --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
             --compatible-runtimes python3.11 \
             --region $AWS_REGION \
@@ -62,49 +62,40 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # ------------------ Package ingest Lambda ------------------
-      - name: Prepare ingest Lambda package
+      # ------------------ Package all Lambdas ------------------
+      - name: Prepare Lambda packages
         run: |
           mkdir -p package
+
+          # Ingest Lambda
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
           cp lambda/ingest.py ./package/
           pushd package
           zip -r ../ingest.zip .
           popd
+          rm -rf package/*
 
-      # ------------------ Package Knowledge Base Handler Lambda ------------------
-      - name: Prepare Knowledge Base Handler package
-        run: |
-          mkdir -p package
+          # Knowledge Base Handler Lambda
           cp lambda/knowledgebase_handler.py ./package/
           pushd package
           zip -r ../knowledgebase_handler.zip .
           popd
+          rm -rf package/*
 
-      # ------------------ Package init_db Lambda ------------------
-      - name: Prepare init_db Lambda package
-        run: |
-          mkdir -p package
+          # init_db Lambda
           cp lambda/init_db.py ./package/
           pushd package
           zip -r ../init_db.zip .
           popd
+          rm -rf package/*
 
       # ------------------ Upload Lambda artifacts ------------------
-      - name: Upload ingest Lambda artifact to S3
+      - name: Upload Lambda artifacts to S3
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp ingest.zip s3://$BUCKET_NAME/lambda/ingest.zip --region $AWS_REGION
-
-      - name: Upload Knowledge Base Handler artifact to S3
-        run: |
-          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp knowledgebase_handler.zip s3://$BUCKET_NAME/lambda/knowledgebase_handler.zip --region $AWS_REGION
-
-      - name: Upload init_db Lambda artifact to S3
-        run: |
-          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp init_db.zip s3://$BUCKET_NAME/lambda/init_db.zip --region $AWS_REGION
 
       # ------------------ Deploy CloudFormation ------------------
@@ -120,8 +111,10 @@ jobs:
               IngestLambdaLayerArn=$LAYER_ARN \
               KnowledgeBaseHandlerS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
               KnowledgeBaseHandlerS3Key=lambda/knowledgebase_handler.zip \
+              KnowledgeBaseHandlerLayerArn=$LAYER_ARN \
               InitDBLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
               InitDBLambdaS3Key=lambda/init_db.zip \
+              InitDBLambdaLayerArn=$LAYER_ARN \
               DBUsername=poc_admin \
               DBName=bedrock_poc \
             --region $AWS_REGION

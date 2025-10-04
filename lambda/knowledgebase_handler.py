@@ -2,7 +2,7 @@ import os
 import psycopg2
 import json
 import boto3
-import pgvector
+from pgvector.psycopg2 import register_vector, Vector
 
 # ------------------ Environment ------------------
 DB_HOST = os.environ['DB_HOST']
@@ -47,7 +47,7 @@ def lambda_handler(event, context):
         user=username,
         password=password
     )
-    pgvector.register_vector(conn)  # register pgvector adapter
+    register_vector(conn)  # Correct way
     cur = conn.cursor()
 
     # Extract query text & filters
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
         return {"statusCode": 400, "body": "Query text is required"}
 
     # Step 1: Generate embedding vector
-    query_embedding = get_query_embedding(query_text)
+    query_embedding = Vector(get_query_embedding(query_text))  # Wrap as Vector
 
     # Step 2: Build SQL with vector similarity search
     sql = """
