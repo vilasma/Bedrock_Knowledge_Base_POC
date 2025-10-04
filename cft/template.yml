@@ -453,7 +453,7 @@ Resources:
           EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.Arn
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
           TableName: "document_chunks"
