@@ -8,3 +8,4 @@ requests
 chardet
 pdfplumber
 charset_normalizer
+cffi
