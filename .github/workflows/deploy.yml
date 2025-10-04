@@ -26,52 +26,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11 locally (optional for packaging lightweight deps)
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
       - name: Install zip and wget
-        run: sudo apt-get update && sudo apt-get install -y zip wget build-essential
+        run: sudo apt-get update && sudo apt-get install -y zip wget
 
-      # ------------------ Build Lambda Layer (Python 3.11 + dependencies) ------------------
+      # ------------------ Build Lambda layer (Amazon Linux 2) ------------------
       - name: Build Lambda layer (numpy, cryptography, psycopg2-binary, cffi, pgvector)
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
-            set -e
-            yum update -y
-            yum groupinstall -y 'Development Tools'
-            yum install -y gcc gcc-c++ make wget tar gzip zip \
-                libffi-devel postgresql-devel bzip2 bzip2-devel xz-devel zlib-devel \
-                bzip2 bzip2-devel xz-devel zlib-devel
-
-            # Build Python 3.11 from source
-            cd /tmp
-            wget https://www.python.org/ftp/python/3.11.10/Python-3.11.10.tgz
-            tar xvf Python-3.11.10.tgz
-            cd Python-3.11.10
-            ./configure --enable-optimizations --with-ensurepip=install
-            make -j$(nproc)
-            make altinstall
-
-            # Verify
-            python3.11 --version
-
-            # Prepare layer folder
-            mkdir -p /var/task/python
-
-            # Install dependencies into layer folder
-            python3.11 -m pip install --upgrade pip setuptools wheel
-            python3.11 -m pip install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t /var/task/python
-
-            # Zip the layer
-            cd /var/task
+            yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
+            python3.11 -m pip install --upgrade pip
+            mkdir -p python
+            pip3 install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t python
             zip -r ingest-dependencies-layer.zip python
-            ls -lh ingest-dependencies-layer.zip
+            mv ingest-dependencies-layer.zip /var/task/
           "
 
-      # ------------------ Publish Lambda Layer ------------------
+      # ------------------ Publish Lambda layer ------------------
       - name: Publish Lambda layer
         id: publish_layer
         run: |
@@ -91,14 +67,14 @@ jobs:
         run: |
           mkdir -p package
 
-          # Copy all Python files from lambda/ to package/ (NumPy comes from layer)
+          # Copy all Python files from lambda/ to package/
           cp lambda/*.py package/
 
-          # Install lightweight dependencies if needed
+          # Optional: Install Python dependencies (excluding numpy) locally
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
 
-          # Create zips for all Lambdas
+          # Create zips for each Lambda
           pushd package
           zip -r ../ingest.zip *
           zip -r ../knowledgebase_handler.zip *
