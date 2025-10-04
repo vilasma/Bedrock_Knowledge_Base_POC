@@ -44,10 +44,9 @@ jobs:
                 python3.11 python3.11-devel python3-pip 
             python3.11 -m pip install --upgrade pip setuptools wheel
             mkdir -p python
-            pip3 install \
-                numpy==1.26.4 \ 
-                cryptography psycopg2-binary cffi pgvector -t python
+            pip3 install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t python
             zip -r ingest-dependencies-layer.zip python
+            ls -l ingest-dependencies-layer.zip
             mv ingest-dependencies-layer.zip /var/task/
           "
 
