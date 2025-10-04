@@ -62,29 +62,23 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # ------------------ Package all Lambdas ------------------
+      # ------------------ Prepare Lambda packages ------------------
       - name: Prepare Lambda packages
         run: |
           mkdir -p package
 
-          # ---------------- Ingest Lambda ----------------
+          # Copy all Python files from lambda/ to package/
+          cp lambda/*.py package/
+
+          # Optional: Install Python dependencies (excluding numpy) locally
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
-          cp lambda/*.py ./package/
-          pushd package
-          zip -r ../ingest.zip .
-          popd
 
-          # ---------------- Knowledge Base Handler Lambda ----------------
-          cp lambda/*.py ./package/
+          # Create zips for each Lambda
           pushd package
-          zip -r ../knowledgebase_handler.zip .
-          popd
-
-          # ---------------- init_db Lambda ----------------
-          cp lambda/*.py ./package/
-          pushd package
-          zip -r ../init_db.zip .
+          zip -r ../ingest.zip *
+          zip -r ../knowledgebase_handler.zip *
+          zip -r ../init_db.zip *
           popd
 
       # ------------------ Upload Lambda artifacts ------------------
