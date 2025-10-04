@@ -439,6 +439,16 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::bedrock-ingest-bucket
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - arn:aws:s3:::bedrock-ingest-bucket/*
+              - Effect: Allow
+                Action:
                   - rds:DescribeDBClusters
                   - rds:DescribeDBInstances
                 Resource: "*"

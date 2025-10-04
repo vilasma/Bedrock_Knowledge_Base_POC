@@ -6,12 +6,12 @@ import json
 import boto3
 
 # ------------------ Environment Variables ------------------
-DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
-DB_NAME = os.environ['DB_NAME']
-DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
-REGION = os.environ.get('REGION', 'us-east-1')
-TOP_K = int(os.environ.get('TOP_K', 5))
+DB_HOST = "bedrock-s3-ingest-poc-rdscluster-eaynvuezfc2u.cluster-cklmm6iw2i6h.us-east-1.rds.amazonaws.com"
+DB_PORT = 5432
+DB_NAME = "bedrock_poc"
+DB_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:632944299864:secret:bedrock-poc-ingest-db-secret-ACkViW"
+REGION = 'us-east-1'
+TOP_K = 5
 
 # ------------------ Initialize clients ------------------
 secrets_client = boto3.client('secretsmanager', region_name=REGION)

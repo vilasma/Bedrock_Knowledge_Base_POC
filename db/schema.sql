@@ -63,3 +63,63 @@ drop INDEX IF EXISTS vector;
 
 drop EXTENSION IF EXISTS vector;
 drop EXTENSION IF EXISTS pgcrypto;
+
+
+
+-- ==============================================
+-- 1️⃣ Enable UUID generation
+-- ==============================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ==============================================
+-- 2️⃣ Add new UUID columns
+-- ==============================================
+ALTER TABLE documents
+ADD COLUMN document_id_new uuid DEFAULT gen_random_uuid();
+
+ALTER TABLE document_chunks
+ADD COLUMN document_id_new uuid;
+
+-- ==============================================
+-- 3️⃣ Populate child table UUIDs
+-- ==============================================
+UPDATE document_chunks dc
+SET document_id_new = d.document_id_new
+FROM documents d
+WHERE dc.document_id = d.document_id;
+
+-- ==============================================
+-- 4️⃣ Drop foreign key on child table (if exists)
+-- ==============================================
+ALTER TABLE document_chunks
+DROP CONSTRAINT IF EXISTS document_chunks_document_id_fkey;
+
+-- ==============================================
+-- 5️⃣ Drop old text ID columns
+-- ==============================================
+ALTER TABLE document_chunks DROP COLUMN document_id;
+ALTER TABLE documents DROP COLUMN document_id;
+
+-- ==============================================
+-- 6️⃣ Rename new UUID columns to original names
+-- ==============================================
+ALTER TABLE documents RENAME COLUMN document_id_new TO document_id;
+ALTER TABLE document_chunks RENAME COLUMN document_id_new TO document_id;
+
+-- ==============================================
+-- 7️⃣ Add PRIMARY KEY on documents
+-- ==============================================
+ALTER TABLE documents
+ADD CONSTRAINT documents_pkey PRIMARY KEY (document_id);
+
+-- ==============================================
+-- 8️⃣ Add FOREIGN KEY on document_chunks
+-- ==============================================
+ALTER TABLE document_chunks
+ADD CONSTRAINT document_chunks_document_id_fkey
+FOREIGN KEY (document_id) REFERENCES documents(document_id);
+
+-- ==============================================
+-- ✅ Done
+-- Now your tables are UUID-compliant for Bedrock ingestion
+-- ==============================================
