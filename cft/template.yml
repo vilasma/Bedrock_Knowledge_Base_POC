@@ -439,30 +439,43 @@ Resources:
                   - rds-data:ExecuteStatement
                 Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster/${RDSCluster}
 
-  # BedrockKnowledgeBase:
-  #   Type: AWS::Bedrock::KnowledgeBase
-  #   DependsOn: 
-  #     - InitDBLambda
-  #   Properties:
-  #     Name: poc-bedrock-kb
-  #     Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
-  #     RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
-  #     KnowledgeBaseConfiguration:
-  #       Type: VECTOR
-  #       VectorKnowledgeBaseConfiguration:
-  #         EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
-  #     StorageConfiguration:
-  #       Type: RDS
-  #       RdsConfiguration:
-  #         ResourceArn: !GetAtt RDSCluster.DBClusterArn
-  #         CredentialsSecretArn: !Ref DBSecret
-  #         DatabaseName: !Ref DBName
-  #         TableName: document_chunks
-  #         FieldMapping:
-  #           PrimaryKeyField: document_id
-  #           VectorField: embedding_vector
-  #           TextField: chunks
-  #           MetadataField: metadata
+  BedrockKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    DependsOn: 
+      - KnowledgeBaseHandlerFunction
+    Properties:
+      Name: poc-bedrock-kb
+      Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
+      RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
+      KnowledgeBaseConfiguration:
+        Type: VECTOR
+        VectorKnowledgeBaseConfiguration:
+          EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
+      StorageConfiguration:
+        Type: RDS
+        RdsConfiguration:
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
+          DatabaseName: !Ref DBName
+          TableName: "document_chunks"
+          FieldMapping:
+            PrimaryKeyField: document_id
+            VectorField: embedding_vector
+            TextField: chunk_text
+            MetadataField: metadata
+
+  KnowledgeBaseDataSource:
+    Type: AWS::Bedrock::DataSource
+    Properties:
+      KnowledgeBaseId: !Ref BedrockKnowledgeBase
+      Name: "Knowledge-Base-DataSource"
+      Description: "S3 bucket for Bedrock RAG ingestion"
+      DataSourceConfiguration:
+        Type: S3
+        S3Configuration:
+          BucketArn: arn:aws:s3:::bedrock-ingest-bucket
+          InclusionPrefixes:
+            - "lambda/"
 
 Outputs:
   RDSClusterEndpoint:
@@ -489,13 +502,13 @@ Outputs:
     Description: Lambda function to query/retrieve document chunks
     Value: !Ref KnowledgeBaseHandlerFunction
   
-  # BedrockKnowledgeBaseArn:
-  #   Description: ARN of the Bedrock Knowledge Base
-  #   Value: !Ref BedrockKnowledgeBase
+  BedrockKnowledgeBaseArn:
+    Description: ARN of the Bedrock Knowledge Base
+    Value: !Ref BedrockKnowledgeBase
 
-  # BedrockKnowledgeBaseName:
-  #   Description: Name of the Bedrock Knowledge Base
-  #   Value: !GetAtt BedrockKnowledgeBase.Name
+  BedrockKnowledgeBaseId:
+    Description: Name of the Bedrock Knowledge Base
+    Value: !GetAtt BedrockKnowledgeBase
 
   BedrockKnowledgeBaseRoleArn:
     Description: IAM Role ARN used by Bedrock Knowledge Base
