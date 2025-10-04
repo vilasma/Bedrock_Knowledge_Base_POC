@@ -88,7 +88,7 @@ def lambda_handler(event, context):
                 """,
                 (
                     tenant_id, user_id, document_id,
-                    project_id, thread_id, chunk,
+                    project_id, thread_id, chunk.replace("\x00", ""),
                     embedding, json.dumps(metadata_values)
                 )
             )
