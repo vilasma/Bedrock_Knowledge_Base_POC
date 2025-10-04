@@ -504,7 +504,7 @@ Outputs:
   
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
-    Value: !Ref BedrockKnowledgeBase.KnowledgeBaseArn
+    Value: !Ref BedrockKnowledgeBase
 
   BedrockKnowledgeBaseId:
     Description: Name of the Bedrock Knowledge Base
