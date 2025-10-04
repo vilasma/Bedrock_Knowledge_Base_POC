@@ -36,11 +36,13 @@ jobs:
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
             set -e
 
-            # Install build dependencies
+            # Install build dependencies including OpenSSL for ssl module
             yum update -y
             yum groupinstall -y 'Development Tools'
             yum install -y gcc gcc-c++ make wget tar gzip zip \
-                libffi-devel postgresql-devel bzip2 bzip2-devel xz-devel zlib-devel
+                libffi-devel postgresql-devel \
+                bzip2 bzip2-devel xz-devel zlib-devel \
+                openssl-devel
 
             # Build Python 3.11 from source
             cd /tmp
@@ -57,6 +59,7 @@ jobs:
             mkdir -p /var/task/python
 
             # Install packages into layer folder
+            python3.11 -m ensurepip
             python3.11 -m pip install --upgrade pip setuptools wheel
             python3.11 -m pip install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t /var/task/python
 
