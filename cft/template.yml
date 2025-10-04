@@ -443,6 +443,7 @@ Resources:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn: 
       - KnowledgeBaseHandlerFunction
+      - RDSClusterInstance
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
