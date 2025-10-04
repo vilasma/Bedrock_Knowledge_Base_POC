@@ -11,7 +11,7 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
-bedrock_client = boto3.client('bedrock', region_name=REGION)
+bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
 
 def get_db_credentials(secret_arn):
     secret = secrets_client.get_secret_value(SecretId=secret_arn)
