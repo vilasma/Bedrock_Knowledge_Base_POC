@@ -446,6 +446,12 @@ Resources:
                   - rds-data:ExecuteStatement
                   - rds-data:BatchExecuteStatement
                 Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster/${RDSCluster}
+              # ✅ Bedrock: Invoke embedding model
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1
+
 
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase

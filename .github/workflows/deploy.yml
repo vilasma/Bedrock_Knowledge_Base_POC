@@ -67,14 +67,14 @@ jobs:
         run: |
           mkdir -p package
 
-          # Copy all Python files from lambda/ to package/
+          # Copy all Python files from lambda/ to package/ (no NumPy)
           cp lambda/*.py package/
 
-          # Optional: Install Python dependencies (excluding numpy) locally
+          # Install other lightweight dependencies if needed
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
 
-          # Create zips for each Lambda
+          # Create zips for all Lambdas
           pushd package
           zip -r ../ingest.zip *
           zip -r ../knowledgebase_handler.zip *
