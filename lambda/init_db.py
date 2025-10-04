@@ -69,6 +69,11 @@ def lambda_handler(event, context):
             ON document_chunks USING gin (to_tsvector('simple', chunk_text));
         END IF;
     END$$;
+
+    -- Create HNSW index required by Bedrock
+    CREATE INDEX IF NOT EXISTS idx_documents_embedding
+    ON document_chunks
+    USING hnsw (embedding_vector vector_cosine_ops);
     """
 
     cur.execute(create_table_query)
