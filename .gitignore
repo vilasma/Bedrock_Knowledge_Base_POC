@@ -1,2 +1,2 @@
 *.zip
-test_poc.py
+__pycache__/
