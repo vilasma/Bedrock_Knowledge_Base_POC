@@ -37,17 +37,14 @@ jobs:
       # ------------------ Build Lambda Layer ------------------
       - name: Build Lambda layer (cryptography + psycopg2-binary)
         run: |
-          mkdir -p layer_build/python
-          python -m pip install --upgrade pip
-          python -m pip install cryptography psycopg2-binary -t layer_build/python
-          # Verify the layer is non-empty
-          if [ -z "$(ls -A layer_build/python)" ]; then
-            echo "ERROR: Layer python directory is empty"
-            exit 1
-          fi
-          cd layer_build
-          zip -r9 ingest-dependencies-layer.zip python
-          cd ..
+          docker run --rm -v $PWD:/build -w /build amazonlinux:2 /bin/bash -c "
+          yum install -y python3.11 python3.11-devel gcc gcc-c++ make zip && \
+          python3.11 -m ensurepip && \
+          python3.11 -m pip install --upgrade pip && \
+          mkdir -p python && \
+          pip3.11 install cryptography charset_normalizer requests -t python && \
+          zip -r ingest-dependencies-layer.zip python
+          "
 
       # ------------------ Publish Lambda Layer ------------------
       - name: Publish Lambda layer
