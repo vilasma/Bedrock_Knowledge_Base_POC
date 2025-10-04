@@ -11,4 +11,4 @@ charset_normalizer
 cffi
 docx
 lxml
-Image
+pillow
