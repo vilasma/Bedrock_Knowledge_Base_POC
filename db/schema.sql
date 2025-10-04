@@ -37,4 +37,13 @@ ALTER TABLE document_chunks
 
 -- Ensure uniqueness
 ALTER TABLE document_chunks
-    ADD CONSTRAINT document_id_unique UNIQUE (document_id);
+ADD CONSTRAINT document_id_unique UNIQUE (document_id);
+
+ALTER TABLE document_chunks
+ALTER COLUMN embedding_vector TYPE vector(1024);
+
+SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
+
+ALTER EXTENSION vector UPDATE;
+
+select document_name, document_id, chunk_text from document_chunks limit 1000;

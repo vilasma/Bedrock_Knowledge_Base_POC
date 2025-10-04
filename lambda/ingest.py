@@ -30,9 +30,9 @@ def get_db_credentials(secret_arn):
 
 
 def get_embedding(text):
-    """Generate 1024-dimensional embedding using Bedrock Titan V2"""
+    """Generate 1024-dimensional embedding using Bedrock Titan V1"""
     response = bedrock_client.invoke_model(
-        modelId='amazon.titan-embed-text-v1',
+        modelId='amazon.titan-embed-text-v2',
         body=json.dumps({"inputText": text}),
         contentType='application/json',
         accept='application/json'
