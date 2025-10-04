@@ -39,17 +39,18 @@ jobs:
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
+            set -e
             yum install -y gcc gcc-c++ make wget tar gzip zip \
                 libffi-devel postgresql-devel \
                 python3.11 python3.11-devel python3-pip 
             python3.11 -m pip install --upgrade pip setuptools wheel
-            mkdir -p python
-            pip3 install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t python
+            mkdir -p /var/task/python
+            pip3 install numpy==1.26.4 cryptography psycopg2-binary cffi pgvector -t /var/task/python
+            cd /var/task
             zip -r ingest-dependencies-layer.zip python
-            ls -l ingest-dependencies-layer.zip
-            mv ingest-dependencies-layer.zip /var/task/
+            ls -lh ingest-dependencies-layer.zip
           "
-
+          
       # ------------------ Publish Lambda layer ------------------
       - name: Publish Lambda layer
         id: publish_layer
