@@ -67,22 +67,25 @@ jobs:
         run: |
           mkdir -p package
 
-          # Ingest Lambda
+          # ---------------- Ingest Lambda ----------------
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
-          cp lambda/ingest.py ./package/
+          cp lambda/*.py ./package/
           pushd package
           zip -r ../ingest.zip .
+          popd
 
-          # Knowledge Base Handler Lambda
-          cp lambda/knowledgebase_handler.py ./package/
+          # ---------------- Knowledge Base Handler Lambda ----------------
+          cp lambda/*.py ./package/
           pushd package
           zip -r ../knowledgebase_handler.zip .
+          popd
 
-          # init_db Lambda
-          cp lambda/init_db.py ./package/
+          # ---------------- init_db Lambda ----------------
+          cp lambda/*.py ./package/
           pushd package
           zip -r ../init_db.zip .
+          popd
 
       # ------------------ Upload Lambda artifacts ------------------
       - name: Upload Lambda artifacts to S3
