@@ -35,15 +35,16 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip wget
 
       # ------------------ Build Lambda Layer ------------------
-      - name: Build Lambda layer (cryptography + psycopg2-binary)
+      - name: Build Lambda layer (cryptography + psycopg2-binary) in Amazon Linux 2
         run: |
-          docker run --rm -v $PWD:/build -w /build amazonlinux:2 /bin/bash -c "
-          yum install -y python3.11 python3.11-devel gcc gcc-c++ make zip && \
-          python3.11 -m ensurepip && \
-          python3.11 -m pip install --upgrade pip && \
-          mkdir -p python && \
-          pip3.11 install cryptography charset_normalizer requests -t python && \
-          zip -r ingest-dependencies-layer.zip python
+          mkdir -p layer_build
+          docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
+            yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
+            python3.11 -m pip install --upgrade pip
+            mkdir -p python
+            pip3 install cryptography psycopg2-binary -t python
+            zip -r ingest-dependencies-layer.zip python
+            mv ingest-dependencies-layer.zip /var/task/
           "
 
       # ------------------ Publish Lambda Layer ------------------
