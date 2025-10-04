@@ -30,6 +30,7 @@ def lambda_handler(event, context):
     create_table_query = """
     -- Create extension for vector operations
     CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
     -- Create table for chunks (run once after DB is reachable)
     CREATE TABLE IF NOT EXISTS document_chunks (
