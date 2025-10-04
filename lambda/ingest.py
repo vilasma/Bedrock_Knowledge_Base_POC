@@ -61,13 +61,14 @@ def chunk_text(text, chunk_size=CHUNK_SIZE):
         yield i // chunk_size, " ".join(words[i:i+chunk_size])
 
 # ------------------ Embeddings ------------------
-def generate_embedding(text):
+def get_query_embedding(query_text):
     response = bedrock_client.invoke_model(
-        ModelId="amazon.titan-embed-text-v1",
-        Body=json.dumps({"text": text}),
-        ContentType="application/json"
+        modelId="amazon.titan-embed-text-v1",
+        body=json.dumps({"inputText": query_text}),   # Titan expects inputText
+        contentType="application/json",
+        accept="application/json"
     )
-    result = json.loads(response['Body'].read())
+    result = json.loads(response['body'].read())
     return result['embedding']
 
 # ------------------ Lambda Handler ------------------
