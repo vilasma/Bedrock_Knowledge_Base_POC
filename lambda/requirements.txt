@@ -9,3 +9,4 @@ chardet
 pdfplumber
 charset_normalizer
 cffi
+docx
