@@ -10,3 +10,4 @@ pdfplumber
 charset_normalizer
 cffi
 docx
+lxml
