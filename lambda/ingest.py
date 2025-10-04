@@ -102,8 +102,8 @@ def lambda_handler(event, context):
         conn.commit()
 
         # Process chunks
-        for chunk_index, chunk_text in chunk_text(document_text):
-            embedding_vector = generate_embedding(chunk_text)
+        for chunk_index, chunk in chunk_text(document_text):
+            embedding_vector = generate_embedding(chunk)
             metadata = {
                 "tenant_id": tenant_id,
                 "user_id": user_id,
@@ -115,7 +115,7 @@ def lambda_handler(event, context):
             cur.execute("""
                 INSERT INTO document_chunks (document_id, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
                 VALUES (%s, %s, %s, %s, %s, 'completed', %s)
-            """, (document_id, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow()))
+            """, (document_id, chunk_index, chunk, embedding_vector, json.dumps(metadata), datetime.utcnow()))
 
         # Update document status to completed
         cur.execute("""

@@ -9,6 +9,6 @@ chardet
 pdfplumber
 charset_normalizer
 cffi
-docx
+python-docx
 lxml
 pillow
