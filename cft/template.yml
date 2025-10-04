@@ -242,6 +242,8 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
       Policies:
         - PolicyName: BedrockS3RDSAccess
           PolicyDocument:
@@ -416,7 +418,6 @@ Resources:
   BedrockKnowledgeBaseRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: poc-bedrock-kb-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
