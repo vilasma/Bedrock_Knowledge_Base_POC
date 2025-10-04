@@ -57,9 +57,18 @@ def lambda_handler(event, context):
     ON document_chunks(document_id);
 
     -- Create GIN index for full-text search
-    CREATE INDEX idx_document_chunks_chunk_text
-    ON document_chunks
-    USING gin (to_tsvector('simple', chunk_text));
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relname = 'idx_document_chunks_chunk_text'
+        ) THEN
+            CREATE INDEX idx_document_chunks_chunk_text
+            ON document_chunks USING gin (to_tsvector('simple', chunk_text));
+        END IF;
+    END$$;
     """
 
     cur.execute(create_table_query)
