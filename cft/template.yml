@@ -207,7 +207,6 @@ Resources:
     Properties:
       Engine: aurora-postgresql
       EngineVersion: "15.5"   # ✅ Upgrade target (must support pgvector >=0.5.0)
-      AllowMajorVersionUpgrade: true
       DatabaseName: !Ref DBName
       MasterUsername: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:username}}"]]
       MasterUserPassword: !Join ["", ["{{resolve:secretsmanager:", !Ref DBSecret, ":SecretString:password}}"]]
@@ -228,6 +227,7 @@ Resources:
       DBInstanceClass: !Ref InstanceClass
       Engine: aurora-postgresql
       PubliclyAccessible: false
+      AllowMajorVersionUpgrade: true
 
   ### IAM Role for Lambda
   LambdaExecutionRole:
