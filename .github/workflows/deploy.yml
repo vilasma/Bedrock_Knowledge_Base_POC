@@ -35,32 +35,32 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zip wget
 
       # ------------------ Build Lambda Layer ------------------
-      - name: Build Lambda layer (cryptography + psycopg2-binary) in Amazon Linux 2
-        run: |
-          mkdir -p layer_build
-          docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
-            yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
-            python3.11 -m pip install --upgrade pip
-            mkdir -p python
-            pip3 install cryptography psycopg2-binary cffi -t python
-            zip -r ingest-dependencies-layer.zip python
-            mv ingest-dependencies-layer.zip /var/task/
-          "
+      # - name: Build Lambda layer (cryptography + psycopg2-binary) in Amazon Linux 2
+      #   run: |
+      #     mkdir -p layer_build
+      #     docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
+      #       yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
+      #       python3.11 -m pip install --upgrade pip
+      #       mkdir -p python
+      #       pip3 install cryptography psycopg2-binary cffi -t python
+      #       zip -r ingest-dependencies-layer.zip python
+      #       mv ingest-dependencies-layer.zip /var/task/
+      #     "
 
-      # ------------------ Publish Lambda Layer ------------------
-      - name: Publish Lambda layer
-        id: publish_layer
-        run: |
-          LAYER_ARN=$(aws lambda publish-layer-version \
-            --layer-name ingest-dependencies-layer \
-            --description "Dependencies for ingest Lambda" \
-            --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
-            --compatible-runtimes python3.11 \
-            --region $AWS_REGION \
-            --query 'LayerVersionArn' \
-            --output text)
-          echo "Layer ARN: $LAYER_ARN"
-          echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
+      # # ------------------ Publish Lambda Layer ------------------
+      # - name: Publish Lambda layer
+      #   id: publish_layer
+      #   run: |
+      #     LAYER_ARN=$(aws lambda publish-layer-version \
+      #       --layer-name ingest-dependencies-layer \
+      #       --description "Dependencies for ingest Lambda" \
+      #       --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
+      #       --compatible-runtimes python3.11 \
+      #       --region $AWS_REGION \
+      #       --query 'LayerVersionArn' \
+      #       --output text)
+      #     echo "Layer ARN: $LAYER_ARN"
+      #     echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
       # ------------------ Package ingest Lambda ------------------
       - name: Prepare ingest Lambda package
