@@ -2,7 +2,7 @@ name: CI/CD - Deploy CloudFormation PoC
 
 on:
   push:
-    branches: 
+    branches:
       - main
   workflow_dispatch:
     inputs:
@@ -30,8 +30,8 @@ jobs:
       - name: Install zip
         run: sudo apt-get update && sudo apt-get install -y zip
 
-      # ------------------ Build Lambda Layer ------------------
-      - name: Build Lambda layer (cryptography + psycopg2)
+      # ------------------ Build Lambda layer ------------------
+      - name: Build Lambda layer (cryptography + psycopg2-binary)
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/lambda-layer amazonlinux:2 /bin/bash -c "
@@ -44,6 +44,7 @@ jobs:
             cd /lambda-layer
             zip -r9 /lambda-layer/ingest-dependencies-layer.zip python
           "
+
       - name: Upload Lambda layer to S3
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -56,8 +57,9 @@ jobs:
       # ------------------ Package ingest Lambda ------------------
       - name: Prepare ingest Lambda package
         run: |
+          mkdir -p package
           python -m pip install --upgrade pip
-          pip install --target ./package -r lambda/requirements.txt
+          pip install --target ./package -r lambda/requirements.txt --no-deps
           cp lambda/ingest.py ./package/
           pushd package
           zip -r ../ingest.zip .

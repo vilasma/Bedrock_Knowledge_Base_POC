@@ -16,6 +16,9 @@ Parameters:
   DBAllocatedStorage:
     Type: Number
     Default: 20
+  IngestLambdaLayerS3Arn:
+    Type: String
+    Default: arn:aws:s3:::bedrock-ingest-bucket/lambda/ingest-dependencies-layer.zip
 
 Resources:
   ### VPC & Subnets
@@ -325,6 +328,8 @@ Resources:
         SubnetIds:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
+      Layers:
+        - !Ref IngestLambdaLayerS3Arn
       Code:
         S3Bucket: bedrock-ingest-bucket
         S3Key: lambda/ingest.zip
