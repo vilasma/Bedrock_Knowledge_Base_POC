@@ -27,10 +27,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install zip and docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zip docker.io
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
 
       # ------------------ Build Lambda Layer ------------------
       - name: Build Lambda layer (cryptography + psycopg2)
