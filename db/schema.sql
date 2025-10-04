@@ -23,3 +23,18 @@ WITH (lists = 100);
 -- Index on document_id for filtering
 CREATE INDEX IF NOT EXISTS idx_document_id 
 ON document_chunks(document_id);
+
+-- Enable the pgcrypto extension for gen_random_uuid
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Update document_id column with new UUIDs
+UPDATE document_chunks
+SET document_id = gen_random_uuid();
+
+-- Alter column to UUID type (should succeed now)
+ALTER TABLE document_chunks
+    ALTER COLUMN document_id TYPE UUID USING document_id::uuid;
+
+-- Ensure uniqueness
+ALTER TABLE document_chunks
+    ADD CONSTRAINT document_id_unique UNIQUE (document_id);

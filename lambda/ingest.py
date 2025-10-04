@@ -2,6 +2,7 @@ import os
 import json
 import boto3
 import psycopg2
+import uuid
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Environment variables
@@ -77,17 +78,21 @@ def lambda_handler(event, context):
 
         # Insert each chunk into DB with unique document_id
         for i, chunk in enumerate(chunks):
-            document_id = f"{key}__chunk{i+1}"  # Unique per chunk
+            # Generate a UUID for document_id
+            document_id = str(uuid.uuid4())
+
+            # Keep the original file/key as document_name
+            document_name = key  # original S3 key
             embedding = get_embedding(chunk)
 
             cur.execute(
                 """
                 INSERT INTO document_chunks
-                (tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding_vector, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (tenant_id, user_id, document_id, document_name, project_id, thread_id, chunk_text, embedding_vector, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
-                    tenant_id, user_id, document_id,
+                    tenant_id, user_id, document_id, document_name,
                     project_id, thread_id, chunk.replace("\x00", ""),
                     embedding, json.dumps(metadata_values)
                 )

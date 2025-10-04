@@ -37,7 +37,7 @@ def lambda_handler(event, context):
     top_k = event.get("top_k", 5)
     filters = event.get("metadata_filters", {})
 
-    sql = "SELECT tenant_id, user_id, document_id, project_id, thread_id, chunk_text, embedding_vector, metadata FROM document_chunks WHERE 1=1"
+    sql = "SELECT tenant_id, user_id, document_id, document_name, project_id, thread_id, chunk_text, embedding_vector, metadata FROM document_chunks WHERE 1=1"
     params = []
 
     # Apply metadata filters

@@ -37,6 +37,7 @@ def lambda_handler(event, context):
         tenant_id VARCHAR(128),
         user_id VARCHAR(128),
         document_id UUID UNIQUE DEFAULT gen_random_uuid(),
+        document_name VARCHAR(256),
         project_id VARCHAR(128),
         thread_id VARCHAR(128),
         chunk_text TEXT,
