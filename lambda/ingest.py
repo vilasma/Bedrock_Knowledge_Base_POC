@@ -75,8 +75,6 @@ def lambda_handler(event, context):
         user_id = metadata_values.get('user_id')
         project_id = metadata_values.get('project_id')
         thread_id = metadata_values.get('thread_id')
-        # Keep the original file/key as document_name
-        document_name = key  # original S3 key
 
         # Insert each chunk into DB with unique document_id
         for i, chunk in enumerate(chunks):
@@ -84,6 +82,8 @@ def lambda_handler(event, context):
             document_id = str(uuid.uuid4())
 
             embedding = get_embedding(chunk)
+            # Keep the original file/key as document_name
+            document_name = key  # original S3 key
 
             cur.execute(
                 """
