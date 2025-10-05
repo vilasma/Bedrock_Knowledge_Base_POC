@@ -318,7 +318,7 @@ Resources:
     Properties:
       FunctionName: poc-s3-handler
       Runtime: python3.11
-      Handler: main_lambda.lambda_handler  # main entry that calls ingest + kb
+      Handler: main_handler.lambda_handler  # main entry that calls ingest + kb
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 600
       MemorySize: 2048
