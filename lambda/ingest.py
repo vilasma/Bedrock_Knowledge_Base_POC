@@ -2,9 +2,8 @@ import os
 import io
 import json
 import uuid
-import asyncio
-import aioboto3
-import asyncpg
+import boto3
+import psycopg2
 import pdfplumber
 import docx
 from datetime import datetime
@@ -13,6 +12,7 @@ import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
 
+# ------------------ ENV ------------------
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = int(os.environ['DB_PORT'])
 DB_NAME = os.environ['DB_NAME']
@@ -20,32 +20,29 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
 
-# ------------------ KB ID cache ------------------
-KB_ID_CACHE = None
+# ------------------ Clients ------------------
+s3_client = boto3.client('s3', region_name=REGION)
+secrets_client = boto3.client('secretsmanager', region_name=REGION)
+bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
+bedrock_client_kb = boto3.client('bedrock', region_name=REGION)
 
-# ------------------ HELPERS ------------------
-async def get_db_credentials(secret_arn):
-    session = aioboto3.Session()
-    async with session.client('secretsmanager', region_name=REGION) as secrets_client:
-        secret = await secrets_client.get_secret_value(SecretId=secret_arn)
-        creds = json.loads(secret['SecretString'])
-        return creds['username'], creds['password']
+# ------------------ Helpers ------------------
+def get_db_credentials(secret_arn):
+    secret = secrets_client.get_secret_value(SecretId=secret_arn)
+    creds = json.loads(secret['SecretString'])
+    return creds['username'], creds['password']
 
-async def get_db_pool():
-    username, password = await get_db_credentials(DB_SECRET_ARN)
-    return await asyncpg.create_pool(
+def get_db_connection():
+    username, password = get_db_credentials(DB_SECRET_ARN)
+    return psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
-        database=DB_NAME,
+        dbname=DB_NAME,
         user=username,
-        password=password,
-        min_size=1,
-        max_size=10
+        password=password
     )
 
 def extract_text_from_s3(bucket, key):
-    import boto3
-    s3_client = boto3.client('s3', region_name=REGION)
     s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
     raw_bytes = s3_obj['Body'].read()
     ext = key.split('.')[-1].lower()
@@ -69,50 +66,46 @@ def chunk_text(text, chunk_size=CHUNK_SIZE):
     for i in range(0, len(words), chunk_size):
         yield i // chunk_size, " ".join(words[i:i + chunk_size])
 
-async def get_query_embedding(text):
-    session = aioboto3.Session()
-    async with session.client('bedrock-runtime', region_name=REGION) as client:
-        response = await client.invoke_model(
-            modelId="amazon.titan-embed-text-v1",
-            body=json.dumps({"inputText": text}),
-            contentType="application/json",
-            accept="application/json"
-        )
-        result = json.loads(await response['body'].read())
-        return result['embedding']
+def get_query_embedding(text):
+    response = bedrock_client.invoke_model(
+        modelId="amazon.titan-embed-text-v1",
+        body=json.dumps({"inputText": text}),
+        contentType="application/json",
+        accept="application/json"
+    )
+    result = json.loads(response['body'].read())
+    return result['embedding']
 
-async def embed_and_store_chunk(pool, document_id, document_name, chunk_index, chunk_text, metadata):
-    embedding_vector = await get_query_embedding(chunk_text)
-    async with pool.acquire() as conn:
-        await conn.execute("""
+def embed_and_store_chunk(conn, document_id, document_name, chunk_index, chunk_text, metadata):
+    embedding_vector = get_query_embedding(chunk_text)
+    with conn.cursor() as cur:
+        cur.execute("""
             INSERT INTO document_chunks
             (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
-            VALUES ($1, $2, $3, $4, $5::vector, $6, 'completed', $7)
-        """, document_id, document_name, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow())
+            VALUES (%s, %s, %s, %s, %s::vector, %s, 'completed', %s)
+            ON CONFLICT (document_id, chunk_index) DO UPDATE
+            SET chunk_text = EXCLUDED.chunk_text,
+                embedding_vector = EXCLUDED.embedding_vector,
+                metadata = EXCLUDED.metadata,
+                status = 'completed',
+                updated_at = NOW()
+        """, (document_id, document_name, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow()))
+        conn.commit()
 
-# ------------------ Bedrock KB Helpers ------------------
-async def get_kb_id(name="poc-bedrock-kb"):
-    """Fetch KB ID dynamically"""
-    global KB_ID_CACHE
-    if KB_ID_CACHE:
-        return KB_ID_CACHE
-
-    async with aioboto3.client("bedrock", region_name=REGION) as client:
-        paginator = client.get_paginator("list_knowledge_bases")
-        async for page in paginator.paginate():
-            for kb in page.get("KnowledgeBases", []):
-                if kb["Name"] == name:
-                    KB_ID_CACHE = kb["KnowledgeBaseId"]
-                    return KB_ID_CACHE
+def get_kb_id(name="poc-bedrock-kb"):
+    paginator = bedrock_client_kb.get_paginator("list_knowledge_bases")
+    for page in paginator.paginate():
+        for kb in page.get("KnowledgeBases", []):
+            if kb["Name"] == name:
+                return kb["KnowledgeBaseId"]
     raise Exception(f"Knowledge Base '{name}' not found")
 
-async def start_kb_sync(kb_id: str):
-    async with aioboto3.client("bedrock-runtime", region_name=REGION) as client:
-        await client.start_knowledge_base_sync(KnowledgeBaseId=kb_id)
-        print(f"[INFO] Knowledge Base sync started for KB ID: {kb_id}")
+def start_kb_sync(kb_id):
+    bedrock_client_kb.start_knowledge_base_sync(KnowledgeBaseId=kb_id)
+    print(f"[INFO] Knowledge Base sync started for KB ID: {kb_id}")
 
-# ------------------ LAMBDA HANDLER ------------------
-async def async_handler(event, context):
+# ------------------ Lambda Handler ------------------
+def lambda_handler(event, context):
     bucket = event.get("bucket") or os.environ.get("CURRENT_S3_BUCKET")
     key = event.get("key") or os.environ.get("CURRENT_S3_KEY")
     if not bucket or not key:
@@ -122,23 +115,24 @@ async def async_handler(event, context):
     if not document_text.strip():
         return {"statusCode": 200, "body": f"No readable text in {key}"}
 
-    pool = await get_db_pool()
+    conn = get_db_connection()
     document_id = str(uuid.uuid4())
     tenant_id = "tenant_001"
     user_id = "user_001"
     project_id = "project_001"
     thread_id = "thread_001"
 
-    async with pool.acquire() as conn:
-        await conn.execute("""
+    with conn.cursor() as cur:
+        cur.execute("""
             INSERT INTO documents
             (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, 'in-progress', $7)
+            VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
             ON CONFLICT (document_id) DO UPDATE
                 SET status='in-progress', updated_at=NOW()
-        """, document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow())
+        """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
+        conn.commit()
 
-    tasks = []
+    # Embed + store chunks
     for chunk_index, chunk in chunk_text(document_text):
         metadata = {
             "tenant_id": tenant_id,
@@ -147,20 +141,17 @@ async def async_handler(event, context):
             "thread_id": thread_id,
             "chunk_index": chunk_index
         }
-        tasks.append(embed_and_store_chunk(pool, document_id, key, chunk_index, chunk, metadata))
-    await asyncio.gather(*tasks)
+        embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata)
 
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=$1
-        """, document_id)
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=%s
+        """, (document_id,))
+        conn.commit()
 
-    # -------------- Trigger KB Sync --------------
-    kb_id = await get_kb_id()
-    await start_kb_sync(kb_id)
+    # Trigger KB sync
+    kb_id = get_kb_id()
+    start_kb_sync(kb_id)
 
-    await pool.close()
+    conn.close()
     return {"statusCode": 200, "body": f"Ingested {key} successfully and triggered KB sync"}
-
-def lambda_handler(event, context):
-    return asyncio.run(async_handler(event, context))

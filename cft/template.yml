@@ -307,6 +307,7 @@ Resources:
           INPUT_S3_DIR: bedrock-ingest-bucket
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
+          DB_USER: !Ref DBUsername
           DB_CLUSTER_ARN: !Ref RDSCluster
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
@@ -342,6 +343,7 @@ Resources:
           DB_CLUSTER_ARN: !Ref RDSCluster
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
+          DB_USER: !Ref DBUsername
           REGION: us-east-1
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           TOP_K: 5

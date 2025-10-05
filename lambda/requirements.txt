@@ -14,12 +14,3 @@ lxml
 pillow
 typing_extensions
 six
-aioboto3
-aiobotocore
-aiohttp
-multidict
-yarl
-async_timeout
-frozenlist
-attrs
-idna

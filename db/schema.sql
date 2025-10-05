@@ -164,7 +164,8 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     embedding_vector VECTOR(1536) NOT NULL,
     metadata JSONB,
     status TEXT NOT NULL DEFAULT 'not-started',
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- =========================================
@@ -230,7 +231,7 @@ VALUES (
     '00000000-0000-0000-0000-000000000001',
     0,
     'test chunk',
-    'bedrockpoc-docs/test.txt',
+    'bedrock-poc-docs/test.txt',
     (SELECT ('[' || string_agg('0', ',') || ']')::vector
      FROM generate_series(1, 1536))
 )
