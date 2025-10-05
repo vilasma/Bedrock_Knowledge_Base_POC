@@ -191,6 +191,40 @@ Resources:
         - !Ref PrivateSubnet1
         - !Ref PrivateSubnet2
 
+  ### VPC Endpoints for Private Subnet access
+  SecretsManagerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
+
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      VpcEndpointType: Gateway
+
+  BedrockVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroup
+      VpcEndpointType: Interface
+
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -249,6 +283,7 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # S3 Access
               - Effect: Allow
                 Action:
                   - s3:ListBucket
@@ -256,10 +291,12 @@ Resources:
                 Resource:
                   - arn:aws:s3:::bedrock-ingest-bucket
                   - arn:aws:s3:::bedrock-ingest-bucket/*
+              # Secrets Manager
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref DBSecret
+              # RDS Access
               - Effect: Allow
                 Action:
                   - rds-db:connect
@@ -269,12 +306,17 @@ Resources:
                   - rds-data:CommitTransaction
                   - rds-data:RollbackTransaction
                 Resource: "*"
+              # Bedrock Permissions (expanded)
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                  - bedrock:StartKnowledgeBaseSync
                   - bedrock:CreateKnowledgeBase
-                Resource: "*"
+                  - bedrock:StartKnowledgeBaseSync
+                  - bedrock:StartIngestionJob
+                  - bedrock:GetIngestionJob
+                  - bedrock:ListIngestionJobs
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
+              # EC2 Networking
               - Effect: Allow
                 Action:
                   - ec2:CreateNetworkInterface
@@ -358,40 +400,6 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn: arn:aws:s3:::bedrock-ingest-bucket
       SourceAccount: !Ref AWS::AccountId
-
-  ### VPC Endpoints for Private Subnet access
-  SecretsManagerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      VpcEndpointType: Interface
-
-  S3VPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
-      RouteTableIds:
-        - !Ref PrivateRouteTable
-      VpcEndpointType: Gateway
-
-  BedrockVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.bedrock-runtime
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref LambdaSecurityGroup
-      VpcEndpointType: Interface
 
   ### Bedrock Knowledge Base IAM Role
   BedrockKnowledgeBaseRole:
