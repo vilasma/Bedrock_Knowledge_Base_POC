@@ -34,8 +34,8 @@ jobs:
       - name: Install zip and wget
         run: sudo apt-get update && sudo apt-get install -y zip wget
 
-      # ------------------ Build Lambda layer ------------------
-      - name: Build Lambda layer (no numpy)
+      # ------------------ Build Lambda layer (no numpy) ------------------
+      - name: Build Lambda layer
         run: |
           mkdir -p layer_build
           docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
@@ -43,7 +43,6 @@ jobs:
             python3.11 -m pip install --upgrade pip
             mkdir -p python
             pip3 install cryptography psycopg2-binary cffi pgvector -t python
-            # Ensure numpy is not included
             rm -rf python/numpy*
             zip -r ingest-dependencies-layer.zip python
             mv ingest-dependencies-layer.zip /var/task/
@@ -61,7 +60,6 @@ jobs:
             --region $AWS_REGION \
             --query 'LayerVersionArn' \
             --output text)
-          echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
       # ------------------ Prepare Lambda packages ------------------
@@ -69,18 +67,18 @@ jobs:
         run: |
           mkdir -p package
 
-          # Copy all Python files
+          # Copy all Python files for single Lambda
           cp lambda/*.py package/
 
-          # Install dependencies (excluding numpy)
+          # Install Python dependencies (without numpy)
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
 
-          # Remove any numpy folders if present
+          # Remove numpy if accidentally installed
           rm -rf package/numpy*
           rm -rf package/__pycache__/
 
-          # Create zips for each Lambda
+          # Zip the Lambda handlers
           pushd package
           zip -r ../s3_handler.zip *
           zip -r ../init_db.zip *
