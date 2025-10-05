@@ -22,3 +22,4 @@ yarl
 async_timeout
 frozenlist
 attrs
+idna
