@@ -54,6 +54,7 @@ def lambda_handler(event, context):
         document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
         chunk_index INT NOT NULL,
         chunk_text TEXT NOT NULL,
+        document_name TEXT NOT NULL,
         embedding_vector VECTOR(1536) NOT NULL,
         metadata JSONB,
         status TEXT NOT NULL DEFAULT 'not-started',
@@ -80,6 +81,7 @@ def lambda_handler(event, context):
         ALTER COLUMN chunk_index SET DATA TYPE INT,
         ALTER COLUMN chunk_text SET DATA TYPE TEXT,
         ALTER COLUMN embedding_vector SET DATA TYPE VECTOR(1536),
+        ALTER COLUMN document_name SET DATA TYPE TEXT,
         ALTER COLUMN metadata SET DATA TYPE JSONB;
     """
     try:

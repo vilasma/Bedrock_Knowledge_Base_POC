@@ -1,8 +1,10 @@
 import os
+import psycopg2
 import json
 import boto3
-import psycopg2
+from pgvector.psycopg2 import register_vector
 
+# ------------------ Environment ------------------
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 DB_NAME = os.environ['DB_NAME']
@@ -10,22 +12,18 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 TOP_K = int(os.environ.get('TOP_K', 5))
 
+# ------------------ Clients ------------------
 bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 
+# ------------------ Helpers ------------------
 def get_db_credentials(secret_arn):
     secret = secrets_client.get_secret_value(SecretId=secret_arn)
     creds = json.loads(secret['SecretString'])
     return creds['username'], creds['password']
 
-def get_db_connection():
-    username, password = get_db_credentials(DB_SECRET_ARN)
-    return psycopg2.connect(
-        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-        user=username, password=password
-    )
-
 def get_query_embedding(query_text):
+    """Generate embedding via Amazon Titan embeddings (Bedrock)."""
     response = bedrock_client.invoke_model(
         modelId="amazon.titan-embed-text-v1",
         body=json.dumps({"inputText": query_text}),
@@ -33,17 +31,30 @@ def get_query_embedding(query_text):
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    return result['embedding']
+    return result['embedding']  # Python list
 
+# ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
-    query_text = event.get("query", "Default query")
-    filters = event.get("filters", {})
+    username, password = get_db_credentials(DB_SECRET_ARN)
 
-    conn = get_db_connection()
+    # Connect & register vector type
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=username,
+        password=password
+    )
+    register_vector(conn)
     cur = conn.cursor()
 
-    query_embedding = get_query_embedding(query_text)
+    query_text = event.get("query", "Retrieve relevant chunks")
+    filters = event.get("filters", {})
 
+    # Step 1: Generate embedding
+    query_embedding = get_query_embedding(query_text)  # Python list
+
+    # Step 2: SQL with vector similarity
     sql = """
         SELECT chunk_text, metadata,
                embedding_vector <#> %s AS cosine_distance
@@ -52,6 +63,7 @@ def lambda_handler(event, context):
     """
     params = [query_embedding]
 
+    # Optional filters
     if "document_ids" in filters:
         sql += " AND document_id = ANY(%s)"
         params.append(filters["document_ids"])
@@ -65,12 +77,22 @@ def lambda_handler(event, context):
     sql += " ORDER BY cosine_distance ASC LIMIT %s"
     params.append(TOP_K)
 
-    cur.execute(sql, params)
-    results = cur.fetchall()
+    # Step 3: Execute & fetch
+    try:
+        cur.execute(sql, params)
+        results = cur.fetchall()
+    except Exception as e:
+        return {"statusCode": 500, "body": f"KnowledgeBase query failed: {e}"}
 
-    response_data = [{"chunk_text": c, "metadata": m, "similarity": 1 - d} for c, m, d in results]
+    # Step 4: Format results
+    response_data = []
+    for chunk_text, metadata, distance in results:
+        response_data.append({
+            "chunk_text": chunk_text,
+            "metadata": metadata,
+            "similarity": 1 - distance
+        })
 
     cur.close()
     conn.close()
-
     return {"statusCode": 200, "body": json.dumps(response_data)}
