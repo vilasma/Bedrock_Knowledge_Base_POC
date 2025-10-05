@@ -346,23 +346,6 @@ Resources:
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           TOP_K: 5
 
-  S3BucketNotification:
-    DeletionPolicy: Retain
-    Type: 'AWS::S3::Bucket'
-    Properties:
-      BucketName: bedrock-ingest-bucket
-      VersioningConfiguration:
-        Status: Enabled
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: prefix
-                    Value: "bedrock-poc-docs/"
-            Function: !GetAtt S3HandlerLambda.Arn
-
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
     Properties:
@@ -456,6 +439,7 @@ Resources:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn: 
       - InitDBLambda
+      - S3HandlerLambda
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"

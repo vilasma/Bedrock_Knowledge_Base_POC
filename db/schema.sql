@@ -128,3 +128,122 @@ FOREIGN KEY (document_id) REFERENCES documents(document_id);
 -- ✅ Done
 -- Now your tables are UUID-compliant for Bedrock ingestion
 -- ==============================================
+
+
+
+-- =========================================
+-- 1️⃣ Extensions
+-- =========================================
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- =========================================
+-- 2️⃣ Documents Table
+-- =========================================
+CREATE TABLE IF NOT EXISTS documents (
+    document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    project_id TEXT,
+    document_name TEXT NOT NULL,
+    thread_id TEXT,
+    status TEXT NOT NULL DEFAULT 'not-started',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- =========================================
+-- 3️⃣ Document Chunks Table
+-- =========================================
+CREATE TABLE IF NOT EXISTS document_chunks (
+    chunk_id SERIAL PRIMARY KEY,
+    document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+    chunk_index INT NOT NULL,
+    chunk_text TEXT NOT NULL,
+    document_name TEXT NOT NULL,
+    embedding_vector VECTOR(1536) NOT NULL,
+    metadata JSONB,
+    status TEXT NOT NULL DEFAULT 'not-started',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- =========================================
+-- 4️⃣ Unique Constraints (for ON CONFLICT)
+-- =========================================
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_name = 'document_chunks'
+        AND constraint_name = 'document_chunks_unique_doc_idx'
+    ) THEN
+        ALTER TABLE document_chunks
+        ADD CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_name = 'document_chunks'
+        AND constraint_name = 'document_chunks_unique_doc_id'
+    ) THEN
+        ALTER TABLE document_chunks
+        ADD CONSTRAINT document_chunks_unique_doc_id UNIQUE (document_id, chunk_id);
+    END IF;
+END $$;
+
+-- =========================================
+-- 5️⃣ Indices
+-- =========================================
+CREATE INDEX IF NOT EXISTS idx_documents_tenant
+    ON documents(tenant_id);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id
+    ON document_chunks(document_id);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_textsearch
+    ON document_chunks USING gin (to_tsvector('simple', chunk_text));
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_l2
+    ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) WITH (lists = 100);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_cosine
+    ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
+
+-- =========================================
+-- 6️⃣ Insert Sample Document (for validation)
+-- =========================================
+INSERT INTO documents (document_id, tenant_id, user_id, project_id, document_name, status)
+VALUES ('00000000-0000-0000-0000-000000000001', 'tenant1', 'user1', 'project1', 'bedrock-poc-docs/test.txt', 'active')
+ON CONFLICT (document_id) DO NOTHING;
+
+-- =========================================
+-- 7️⃣ Insert Sample Chunk (for validation)
+-- =========================================
+INSERT INTO document_chunks (
+    document_id,
+    chunk_index,
+    chunk_text,
+    document_name,
+    embedding_vector
+)
+VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    0,
+    'test chunk',
+    'bedrockpoc-docs/test.txt',
+    (SELECT ('[' || string_agg('0', ',') || ']')::vector
+     FROM generate_series(1, 1536))
+)
+ON CONFLICT (document_id, chunk_index) DO UPDATE
+SET chunk_text = EXCLUDED.chunk_text;
+
+-- =========================================
+-- 8️⃣ Verification
+-- =========================================
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'document_chunks'::regclass
+AND contype IN ('u', 'p');
+
+SELECT COUNT(*) AS documents_count FROM documents;
+SELECT COUNT(*) AS chunks_count FROM document_chunks;

@@ -38,12 +38,16 @@ def lambda_handler(event, context):
         )
         cur = conn.cursor()
 
-        # 1️⃣ Enable extensions
+        # ===============================
+        # 1️⃣ Enable Extensions
+        # ===============================
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         conn.commit()
 
-        # 2️⃣ Create tables (idempotent)
+        # ===============================
+        # 2️⃣ Create Tables (idempotent)
+        # ===============================
         create_tables_query = """
         CREATE TABLE IF NOT EXISTS documents (
             document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,32 +77,23 @@ def lambda_handler(event, context):
         cur.execute(create_tables_query)
         conn.commit()
 
-        # 3️⃣ Detect & remove duplicates
+        # ===============================
+        # 3️⃣ Remove duplicate chunks (if any)
+        # ===============================
         cur.execute("""
-            SELECT COUNT(*) 
-            FROM (
-                SELECT document_id, chunk_index, COUNT(*) 
-                FROM document_chunks 
-                GROUP BY document_id, chunk_index 
-                HAVING COUNT(*) > 1
-            ) dup;
-        """)
-        duplicates_found = cur.fetchone()[0]
-
-        if duplicates_found > 0:
-            delete_duplicates = """
             DELETE FROM document_chunks a
             USING document_chunks b
             WHERE a.chunk_id < b.chunk_id
               AND a.document_id = b.document_id
               AND a.chunk_index = b.chunk_index;
-            """
-            cur.execute(delete_duplicates)
-            conn.commit()
+        """)
+        duplicates_removed = cur.rowcount
+        conn.commit()
+        result["duplicates_removed"] = duplicates_removed
 
-        result["duplicates_removed"] = duplicates_found
-
-        # 4️⃣ Ensure UNIQUE constraint
+        # ===============================
+        # 4️⃣ Ensure UNIQUE constraint on (document_id, chunk_index)
+        # ===============================
         add_constraint = """
         DO $$
         BEGIN
@@ -107,10 +102,10 @@ def lambda_handler(event, context):
                 FROM information_schema.table_constraints
                 WHERE table_name = 'document_chunks'
                   AND constraint_type = 'UNIQUE'
-                  AND constraint_name = 'document_chunks_unique'
+                  AND constraint_name = 'document_chunks_unique_doc_idx'
             ) THEN
                 ALTER TABLE document_chunks
-                ADD CONSTRAINT document_chunks_unique
+                ADD CONSTRAINT document_chunks_unique_doc_idx
                 UNIQUE (document_id, chunk_index);
             END IF;
         END $$;
@@ -118,7 +113,9 @@ def lambda_handler(event, context):
         cur.execute(add_constraint)
         conn.commit()
 
-        # 5️⃣ Rebuild indices
+        # ===============================
+        # 5️⃣ Rebuild Indices
+        # ===============================
         cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_documents_tenant
             ON documents(tenant_id);
@@ -137,7 +134,9 @@ def lambda_handler(event, context):
         """)
         conn.commit()
 
-        # 6️⃣ Fetch constraints & document count
+        # ===============================
+        # 6️⃣ Fetch Constraints & Document Count
+        # ===============================
         cur.execute("""
             SELECT constraint_name
             FROM information_schema.table_constraints
