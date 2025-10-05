@@ -43,6 +43,7 @@ jobs:
             python3.11 -m pip install --upgrade pip
             mkdir -p python
             pip3 install cryptography psycopg2-binary cffi pgvector -t python
+            # Ensure numpy is not included
             rm -rf python/numpy*
             zip -r ingest-dependencies-layer.zip python
             mv ingest-dependencies-layer.zip /var/task/
@@ -54,32 +55,43 @@ jobs:
         run: |
           LAYER_ARN=$(aws lambda publish-layer-version \
             --layer-name ingest-dependencies-layer \
-            --description "Dependencies for PoC Lambda" \
+            --description "Dependencies for all PoC Lambdas" \
             --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
             --compatible-runtimes python3.11 \
             --region $AWS_REGION \
             --query 'LayerVersionArn' \
             --output text)
+          echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # ------------------ Prepare Lambda package ------------------
-      - name: Prepare Lambda package
+      # ------------------ Prepare Lambda packages ------------------
+      - name: Prepare Lambda packages
         run: |
           mkdir -p package
+
+          # Copy all Python files
           cp lambda/*.py package/
+
+          # Install dependencies (excluding numpy)
           python -m pip install --upgrade pip
           pip install --target ./package -r lambda/requirements.txt --no-deps
+
+          # Remove any numpy folders if present
           rm -rf package/numpy*
           rm -rf package/__pycache__/
+
+          # Create zips for each Lambda
           pushd package
           zip -r ../s3_handler.zip *
+          zip -r ../init_db.zip *
           popd
 
-      # ------------------ Upload Lambda artifact ------------------
-      - name: Upload Lambda artifact to S3
+      # ------------------ Upload Lambda artifacts ------------------
+      - name: Upload Lambda artifacts to S3
         run: |
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp s3_handler.zip s3://$BUCKET_NAME/lambda/s3_handler.zip --region $AWS_REGION
+          aws s3 cp init_db.zip s3://$BUCKET_NAME/lambda/init_db.zip --region $AWS_REGION
 
       # ------------------ Deploy CloudFormation ------------------
       - name: Deploy CloudFormation
@@ -89,9 +101,12 @@ jobs:
             --stack-name bedrock-s3-ingest-poc \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
-              S3HandlerLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
-              S3HandlerLambdaS3Key=lambda/s3_handler.zip \
-              S3HandlerLambdaLayerArn=$LAYER_ARN \
+              HandlerS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
+              HandlerS3Key=lambda/s3_handler.zip \
+              HandlerLayerArn=$LAYER_ARN \
+              InitDBLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
+              InitDBLambdaS3Key=lambda/init_db.zip \
+              InitDBLambdaLayerArn=$LAYER_ARN \
               DBUsername=poc_admin \
               DBName=bedrock_poc \
             --region $AWS_REGION
