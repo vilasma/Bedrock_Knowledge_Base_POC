@@ -6,7 +6,7 @@ from knowledgebase_handler import lambda_handler as kb_handler
 logging.basicConfig(level=logging.INFO)
 
 def lambda_handler(event, context):
-    # Pass S3 bucket/key to environment for downstream modules
+    # If triggered by S3, set bucket/key in environment
     if 'Records' in event and len(event['Records']) > 0:
         record = event['Records'][0]['s3']
         os.environ["CURRENT_S3_BUCKET"] = record['bucket']['name']

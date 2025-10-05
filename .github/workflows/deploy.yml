@@ -42,7 +42,7 @@ jobs:
             yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
             python3.11 -m pip install --upgrade pip
             mkdir -p python
-            pip3 install cryptography psycopg2-binary cffi pgvector -t python
+            pip3 install cryptography psycopg2-binary cffi -t python
             rm -rf python/numpy*
             zip -r ingest-dependencies-layer.zip python
             mv ingest-dependencies-layer.zip /var/task/

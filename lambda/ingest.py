@@ -8,10 +8,8 @@ import pdfplumber
 import docx
 import warnings
 from datetime import datetime
-from pgvector.psycopg2 import register_vector
 from pdfminer.pdfinterp import PDFInterpreterError
 
-# ------------------ Logging & warnings ------------------
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
 
 # ------------------ Environment ------------------
@@ -35,10 +33,8 @@ def get_db_credentials(secret_arn):
 
 def get_db_connection():
     username, password = get_db_credentials(DB_SECRET_ARN)
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+    return psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
                             user=username, password=password)
-    register_vector(conn)
-    return conn
 
 def extract_text_from_s3(bucket, key):
     s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
@@ -72,7 +68,7 @@ def get_query_embedding(text):
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    return result['embedding']  # Python list
+    return result['embedding']  # Python list of floats
 
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
@@ -119,8 +115,10 @@ def lambda_handler(event, context):
             "chunk_index": chunk_index
         }
 
+        # Store as float[] array
         cur.execute("""
-            INSERT INTO document_chunks (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
+            INSERT INTO document_chunks 
+            (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, 'completed', %s)
         """, (document_id, key, chunk_index, chunk, embedding_vector, json.dumps(metadata), datetime.utcnow()))
 

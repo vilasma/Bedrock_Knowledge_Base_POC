@@ -1,10 +1,9 @@
 import os
 import psycopg2
 import json
+import math
 import boto3
-from pgvector.psycopg2 import register_vector
 
-# ------------------ Environment ------------------
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = os.environ['DB_PORT']
 DB_NAME = os.environ['DB_NAME']
@@ -12,18 +11,15 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 TOP_K = int(os.environ.get('TOP_K', 5))
 
-# ------------------ Clients ------------------
 bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 
-# ------------------ Helpers ------------------
 def get_db_credentials(secret_arn):
     secret = secrets_client.get_secret_value(SecretId=secret_arn)
     creds = json.loads(secret['SecretString'])
     return creds['username'], creds['password']
 
 def get_query_embedding(query_text):
-    """Generate embedding via Amazon Titan embeddings (Bedrock)."""
     response = bedrock_client.invoke_model(
         modelId="amazon.titan-embed-text-v1",
         body=json.dumps({"inputText": query_text}),
@@ -31,68 +27,40 @@ def get_query_embedding(query_text):
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    return result['embedding']  # Python list
+    return result['embedding']
 
-# ------------------ Lambda Handler ------------------
+def cosine_similarity(a, b):
+    dot = sum(x*y for x,y in zip(a,b))
+    norm_a = math.sqrt(sum(x*x for x in a))
+    norm_b = math.sqrt(sum(y*y for y in b))
+    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
+
 def lambda_handler(event, context):
     username, password = get_db_credentials(DB_SECRET_ARN)
-
-    # Connect & register vector type
     conn = psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=username,
-        password=password
+        host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
+        user=username, password=password
     )
-    register_vector(conn)
     cur = conn.cursor()
 
     query_text = event.get("query", "Retrieve relevant chunks")
     filters = event.get("filters", {})
 
-    # Step 1: Generate embedding
-    query_embedding = get_query_embedding(query_text)  # Python list
+    query_embedding = get_query_embedding(query_text)
 
-    # Step 2: SQL with vector similarity
-    sql = """
-        SELECT chunk_text, metadata,
-               embedding_vector <#> %s AS cosine_distance
-        FROM document_chunks
-        WHERE status='completed'
-    """
-    params = [query_embedding]
+    # Fetch all embeddings from DB (no pgvector)
+    sql = "SELECT chunk_text, embedding_vector, metadata FROM document_chunks WHERE status='completed'"
+    cur.execute(sql)
+    rows = cur.fetchall()
 
-    # Optional filters
-    if "document_ids" in filters:
-        sql += " AND document_id = ANY(%s)"
-        params.append(filters["document_ids"])
-    if "tenant_id" in filters:
-        sql += " AND metadata->>'tenant_id' = %s"
-        params.append(filters["tenant_id"])
-    if "project_id" in filters:
-        sql += " AND metadata->>'project_id' = %s"
-        params.append(filters["project_id"])
+    results = []
+    for chunk_text, embedding_vector, metadata in rows:
+        similarity = cosine_similarity(query_embedding, embedding_vector)
+        results.append({"chunk_text": chunk_text, "metadata": metadata, "similarity": similarity})
 
-    sql += " ORDER BY cosine_distance ASC LIMIT %s"
-    params.append(TOP_K)
-
-    # Step 3: Execute & fetch
-    try:
-        cur.execute(sql, params)
-        results = cur.fetchall()
-    except Exception as e:
-        return {"statusCode": 500, "body": f"KnowledgeBase query failed: {e}"}
-
-    # Step 4: Format results
-    response_data = []
-    for chunk_text, metadata, distance in results:
-        response_data.append({
-            "chunk_text": chunk_text,
-            "metadata": metadata,
-            "similarity": 1 - distance
-        })
-
+    # Sort by similarity
+    results.sort(key=lambda x: x["similarity"], reverse=True)
     cur.close()
     conn.close()
-    return {"statusCode": 200, "body": json.dumps(response_data)}
+
+    return {"statusCode": 200, "body": json.dumps(results[:TOP_K])}
