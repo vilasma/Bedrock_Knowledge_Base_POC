@@ -310,14 +310,16 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1
+
+              - Effect: Allow
+                Action:
                   - bedrock:StartIngestionJob
                   - bedrock:GetIngestionJob
                   - bedrock:ListIngestionJobs
                   - bedrock:CreateKnowledgeBase
                   - bedrock:StartKnowledgeBaseSync
-                Resource:
-                  - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
-                  - arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
               # EC2 Networking
               - Effect: Allow
                 Action:
