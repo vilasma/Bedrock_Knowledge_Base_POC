@@ -143,7 +143,7 @@ def lambda_handler(event, context):
                 (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
                 ON CONFLICT (document_id) DO UPDATE
-                    SET status='in-progress', updated_at=NOW()
+                SET status='in-progress', updated_at=NOW()
             """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
             conn.commit()
 
