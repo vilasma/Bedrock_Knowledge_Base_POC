@@ -438,7 +438,7 @@ Resources:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn: 
       - InitDBLambda
-      - KnowledgeBaseHandlerFunction
+      - S3HandlerLambda
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
@@ -490,13 +490,9 @@ Outputs:
     Description: Lambda function to initialize DB
     Value: !Ref InitDBLambda
 
-  IngestLambdaName:
+  S3HandlerLambdaName:
     Description: Lambda function for ingestion
-    Value: !Ref IngestLambdaFunction
-
-  KnowledgeBaseHandlerLambdaName:
-    Description: Lambda function to query/retrieve document chunks
-    Value: !Ref KnowledgeBaseHandlerFunction
+    Value: !Ref S3HandlerLambda
   
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
