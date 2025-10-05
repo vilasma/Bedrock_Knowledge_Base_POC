@@ -17,6 +17,7 @@ def get_db_credentials(secret_arn):
     creds = json.loads(secret['SecretString'])
     return creds['username'], creds['password']
 
+
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
     username, password = get_db_credentials(DB_SECRET_ARN)
@@ -30,12 +31,12 @@ def lambda_handler(event, context):
     )
     cur = conn.cursor()
 
-    # ------------------ 1️⃣ Enable pgvector + pgcrypto ------------------
+    # 1️⃣ Enable pgvector + pgcrypto
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
     conn.commit()
 
-    # ------------------ 2️⃣ Create/Ensure UUID-Compatible Tables ------------------
+    # 2️⃣ Create Tables
     create_tables_query = """
     CREATE TABLE IF NOT EXISTS documents (
         document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,62 +65,93 @@ def lambda_handler(event, context):
     cur.execute(create_tables_query)
     conn.commit()
 
-    # ------------------ 3️⃣ Ensure Columns Have Correct Data Types ------------------
-    alter_types = """
-    -- documents table
-    ALTER TABLE documents
-        ALTER COLUMN document_id SET DATA TYPE UUID USING document_id::uuid,
-        ALTER COLUMN tenant_id SET DATA TYPE TEXT,
-        ALTER COLUMN user_id SET DATA TYPE TEXT,
-        ALTER COLUMN project_id SET DATA TYPE TEXT,
-        ALTER COLUMN document_name SET DATA TYPE TEXT,
-        ALTER COLUMN thread_id SET DATA TYPE TEXT;
+    # 3️⃣ Detect and Remove Duplicates
+    cur.execute("""
+        SELECT COUNT(*) 
+        FROM (
+            SELECT document_id, chunk_index, COUNT(*) 
+            FROM document_chunks 
+            GROUP BY document_id, chunk_index 
+            HAVING COUNT(*) > 1
+        ) dup;
+    """)
+    duplicates_found = cur.fetchone()[0]
 
-    -- document_chunks table
-    ALTER TABLE document_chunks
-        ALTER COLUMN document_id SET DATA TYPE UUID USING document_id::uuid,
-        ALTER COLUMN chunk_index SET DATA TYPE INT,
-        ALTER COLUMN chunk_text SET DATA TYPE TEXT,
-        ALTER COLUMN embedding_vector SET DATA TYPE VECTOR(1536),
-        ALTER COLUMN document_name SET DATA TYPE TEXT,
-        ALTER COLUMN metadata SET DATA TYPE JSONB;
-    """
-    try:
-        cur.execute(alter_types)
+    if duplicates_found > 0:
+        print(f"[⚠️ WARNING] Found {duplicates_found} duplicate (document_id, chunk_index) pairs. Cleaning up...")
+        delete_duplicates = """
+        DELETE FROM document_chunks a
+        USING document_chunks b
+        WHERE a.chunk_id < b.chunk_id
+          AND a.document_id = b.document_id
+          AND a.chunk_index = b.chunk_index;
+        """
+        cur.execute(delete_duplicates)
         conn.commit()
-    except Exception as e:
-        print(f"[INFO] Column type normalization skipped (likely already correct): {e}")
+        print("[✅ INFO] Duplicate rows removed successfully.")
+    else:
+        print("[✅ INFO] No duplicate rows found in document_chunks.")
 
-    # ------------------ 4️⃣ Rebuild Indices for Search & Vector Similarity ------------------
+    # 4️⃣ Ensure UNIQUE constraint exists on (document_id, chunk_index)
+    add_constraint = """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.table_constraints
+            WHERE table_name = 'document_chunks'
+            AND constraint_type = 'UNIQUE'
+            AND constraint_name = 'document_chunks_unique'
+        ) THEN
+            ALTER TABLE document_chunks
+            ADD CONSTRAINT document_chunks_unique
+            UNIQUE (document_id, chunk_index);
+        END IF;
+    END $$;
+    """
+    cur.execute(add_constraint)
+    conn.commit()
+
+    # 5️⃣ Rebuild Indices
     cur.execute("""
     CREATE INDEX IF NOT EXISTS idx_documents_tenant
-    ON documents(tenant_id);
+        ON documents(tenant_id);
 
     CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id
-    ON document_chunks(document_id);
+        ON document_chunks(document_id);
 
     CREATE INDEX IF NOT EXISTS idx_document_chunks_textsearch
-    ON document_chunks USING gin (to_tsvector('simple', chunk_text));
+        ON document_chunks USING gin (to_tsvector('simple', chunk_text));
 
     CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_l2
-    ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) WITH (lists = 100);
+        ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) WITH (lists = 100);
 
     CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_cosine
-    ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
+        ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
     """)
     conn.commit()
 
-    # ------------------ 5️⃣ Final Validation ------------------
+    # 6️⃣ Validation
+    cur.execute("""
+        SELECT constraint_name
+        FROM information_schema.table_constraints
+        WHERE table_name = 'document_chunks'
+        AND constraint_type = 'UNIQUE';
+    """)
+    constraints = [r[0] for r in cur.fetchall()]
+
     cur.execute("SELECT COUNT(*) FROM documents;")
     docs_count = cur.fetchone()[0]
 
     cur.close()
     conn.close()
 
-    return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "message": "Tables 'documents' and 'document_chunks' initialized successfully and are UUID-compliant.",
-            "documents_existing": docs_count
-        })
+    result = {
+        "message": "Aurora setup complete ✅ — constraints and indices verified.",
+        "unique_constraints": constraints,
+        "duplicates_removed": duplicates_found,
+        "existing_documents": docs_count
     }
+
+    print(json.dumps(result, indent=2))
+    return {"statusCode": 200, "body": json.dumps(result)}

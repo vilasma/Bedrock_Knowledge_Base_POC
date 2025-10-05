@@ -49,6 +49,11 @@ ALTER EXTENSION vector UPDATE;
 select document_name, document_id, chunk_text from document_chunks limit 1000;
 
 
+SET session_replication_role = 'replica';
+DELETE FROM document_chunks;
+DELETE FROM documents;
+SET session_replication_role = 'origin';
+
 drop table document_chunks;
 
 drop INDEX IF EXISTS idx_documents_embedding;
