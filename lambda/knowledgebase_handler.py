@@ -14,6 +14,9 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 TOP_K = int(os.environ.get('TOP_K', 5))
 
+# ---------- KB ID cache (future use) ----------
+KB_ID_CACHE = None
+
 # ------------------ HELPERS ------------------
 async def get_db_credentials(secret_arn):
     session = aioboto3.Session()
@@ -23,17 +26,11 @@ async def get_db_credentials(secret_arn):
         return creds['username'], creds['password']
 
 def parse_embedding(embedding):
-    """
-    Convert embedding string from DB to list of floats.
-    """
     if isinstance(embedding, str):
         embedding = ast.literal_eval(embedding)
     return [float(x) for x in embedding]
 
 def cosine_similarity(a, b):
-    """
-    Compute cosine similarity between two vectors (lists of floats)
-    """
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x*x for x in a))
     norm_b = math.sqrt(sum(y*y for y in b))
@@ -48,12 +45,12 @@ async def get_db_pool():
         user=username,
         password=password,
         min_size=1,
-        max_size=10  # tune based on Lambda memory
+        max_size=10
     )
 
 async def async_query_chunks(pool, query_text):
     """
-    Efficiently fetch all chunk embeddings from DB asynchronously.
+    Fetch embeddings from DB, get query embedding from Bedrock, and return top-K similar chunks.
     """
     # Call Bedrock to get query embedding
     session = aioboto3.Session()
@@ -68,9 +65,12 @@ async def async_query_chunks(pool, query_text):
 
     # Async fetch all chunks
     async with pool.acquire() as conn:
-        rows = await conn.fetch("SELECT chunk_text, embedding_vector, metadata FROM document_chunks WHERE status='completed'")
+        rows = await conn.fetch("""
+            SELECT chunk_text, embedding_vector, metadata 
+            FROM document_chunks 
+            WHERE status='completed'
+        """)
 
-    # Compute similarity
     results = []
     for row in rows:
         embedding_vector = parse_embedding(row['embedding_vector'])
@@ -81,7 +81,6 @@ async def async_query_chunks(pool, query_text):
             "similarity": similarity
         })
 
-    # Sort top K
     results.sort(key=lambda x: x['similarity'], reverse=True)
     return results[:TOP_K]
 

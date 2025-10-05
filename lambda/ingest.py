@@ -20,6 +20,9 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
 
+# ------------------ KB ID cache ------------------
+KB_ID_CACHE = None
+
 # ------------------ HELPERS ------------------
 async def get_db_credentials(secret_arn):
     session = aioboto3.Session()
@@ -87,6 +90,27 @@ async def embed_and_store_chunk(pool, document_id, document_name, chunk_index, c
             VALUES ($1, $2, $3, $4, $5::vector, $6, 'completed', $7)
         """, document_id, document_name, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow())
 
+# ------------------ Bedrock KB Helpers ------------------
+async def get_kb_id(name="poc-bedrock-kb"):
+    """Fetch KB ID dynamically"""
+    global KB_ID_CACHE
+    if KB_ID_CACHE:
+        return KB_ID_CACHE
+
+    async with aioboto3.client("bedrock", region_name=REGION) as client:
+        paginator = client.get_paginator("list_knowledge_bases")
+        async for page in paginator.paginate():
+            for kb in page.get("KnowledgeBases", []):
+                if kb["Name"] == name:
+                    KB_ID_CACHE = kb["KnowledgeBaseId"]
+                    return KB_ID_CACHE
+    raise Exception(f"Knowledge Base '{name}' not found")
+
+async def start_kb_sync(kb_id: str):
+    async with aioboto3.client("bedrock-runtime", region_name=REGION) as client:
+        await client.start_knowledge_base_sync(KnowledgeBaseId=kb_id)
+        print(f"[INFO] Knowledge Base sync started for KB ID: {kb_id}")
+
 # ------------------ LAMBDA HANDLER ------------------
 async def async_handler(event, context):
     bucket = event.get("bucket") or os.environ.get("CURRENT_S3_BUCKET")
@@ -131,8 +155,12 @@ async def async_handler(event, context):
             UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=$1
         """, document_id)
 
+    # -------------- Trigger KB Sync --------------
+    kb_id = await get_kb_id()
+    await start_kb_sync(kb_id)
+
     await pool.close()
-    return {"statusCode": 200, "body": f"Ingested {key} successfully"}
+    return {"statusCode": 200, "body": f"Ingested {key} successfully and triggered KB sync"}
 
 def lambda_handler(event, context):
     return asyncio.run(async_handler(event, context))
