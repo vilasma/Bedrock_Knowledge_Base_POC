@@ -252,11 +252,10 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:ListBucket
-                Resource: !Sub arn:aws:s3:::bedrock-ingest-bucket
-              - Effect: Allow
-                Action:
                   - s3:GetObject
-                Resource: !Sub arn:aws:s3:::bedrock-ingest-bucket/*
+                Resource:
+                  - arn:aws:s3:::bedrock-ingest-bucket
+                  - arn:aws:s3:::bedrock-ingest-bucket/*
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -312,26 +311,28 @@ Resources:
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: us-east-1
 
-  IngestLambdaFunction:
+  
+  ### SINGLE Lambda Function
+  S3HandlerLambda:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: poc-s3-ingest
+      FunctionName: poc-s3-handler
       Runtime: python3.11
-      Handler: ingest.lambda_handler
+      Handler: main_lambda.lambda_handler  # main entry that calls ingest + kb
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-      MemorySize: 1024
+      Timeout: 600
+      MemorySize: 2048
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
         SubnetIds:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
-      Layers: 
+      Layers:
         - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:19
       Code:
         S3Bucket: bedrock-ingest-bucket
-        S3Key: lambda/ingest.zip
+        S3Key: lambda/s3_handler.zip
       Environment:
         Variables:
           INPUT_S3_DIR: bedrock-ingest-bucket
@@ -342,41 +343,12 @@ Resources:
           DB_NAME: !Ref DBName
           REGION: us-east-1
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
-
-  KnowledgeBaseHandlerFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: poc-kb-handler
-      Runtime: python3.11
-      Handler: knowledgebase_handler.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-      MemorySize: 1024
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-      Layers: 
-        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:19
-      Code:
-        S3Bucket: bedrock-ingest-bucket
-        S3Key: lambda/knowledgebase_handler.zip
-      Environment:
-        Variables:
-          INPUT_S3_DIR: bedrock-ingest-bucket
-          DB_HOST: !GetAtt RDSCluster.Endpoint.Address
-          DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          DB_CLUSTER_ARN: !Ref RDSCluster
-          DB_SECRET_ARN: !Ref DBSecret
-          DB_NAME: !Ref DBName
-          REGION: us-east-1
+          TOP_K: 5
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref IngestLambdaFunction
+      FunctionName: !Ref S3HandlerLambda
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceArn: arn:aws:s3:::bedrock-ingest-bucket

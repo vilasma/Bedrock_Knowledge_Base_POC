@@ -36,6 +36,9 @@ def get_query_embedding(query_text):
 
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
+    # Optional: use CURRENT_S3_KEY for logging
+    s3_key = os.environ.get("CURRENT_S3_KEY", "unknown")
+
     username, password = get_db_credentials(DB_SECRET_ARN)
 
     # Connect to DB
@@ -49,7 +52,7 @@ def lambda_handler(event, context):
     cur = conn.cursor()
 
     # Extract query text & filters
-    query_text = event.get("query", "")
+    query_text = event.get("query", f"Retrieve data for {s3_key}")
     filters = event.get("filters", {})
 
     if not query_text:
