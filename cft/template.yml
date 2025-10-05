@@ -347,7 +347,7 @@ Resources:
           REGION: us-east-1
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           TOP_K: 5
-          KB_ID: poc-bedrock-kb
+          KB_ID: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission

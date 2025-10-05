@@ -93,59 +93,76 @@ def start_kb_sync():
     if not KB_ID:
         print("[WARN] KB_ID not set, skipping sync")
         return
-    bedrock_client.start_knowledge_base_sync(KnowledgeBaseId=KB_ID)
-    print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
+    client = boto3.client("bedrock", region_name=os.environ.get("REGION", "us-east-1"))
+    try:
+        client.start_knowledge_base_sync(KnowledgeBaseId=KB_ID)
+        print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
+    except AttributeError as e:
+        print(f"[ERROR] KB sync failed: {e}")
 
 # ------------------ Lambda Handler ------------------
+# ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
-    bucket = event.get("bucket") or os.environ.get("CURRENT_S3_BUCKET")
-    key = event.get("key") or os.environ.get("CURRENT_S3_KEY")
-    if not bucket or not key:
-        return {"statusCode": 400, "body": "S3 bucket/key not provided"}
+    if 'Records' not in event:
+        return {"statusCode": 400, "body": "No S3 records found in event"}
 
-    document_text = extract_text_from_s3(bucket, key)
-    if not document_text.strip():
-        return {"statusCode": 200, "body": f"No readable text in {key}"}
+    processed_files = []
 
     conn = get_db_connection()
-    document_id = str(uuid.uuid4())
-    tenant_id = "tenant_001"
-    user_id = "user_001"
-    project_id = "project_001"
-    thread_id = "thread_001"
+    
+    for record in event['Records']:
+        bucket = record['s3']['bucket']['name']
+        key = record['s3']['object']['key']
 
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO documents
-            (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
-            ON CONFLICT (document_id) DO UPDATE
-                SET status='in-progress', updated_at=NOW()
-        """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
-        conn.commit()
+        document_text = extract_text_from_s3(bucket, key)
+        if not document_text.strip():
+            print(f"[INFO] No readable text in {key}")
+            continue
 
-    # Embed + store chunks
-    for chunk_index, chunk in chunk_text(document_text):
-        metadata = {
-            "tenant_id": tenant_id,
-            "user_id": user_id,
-            "project_id": project_id,
-            "thread_id": thread_id,
-            "chunk_index": chunk_index
-        }
-        embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata)
+        document_id = str(uuid.uuid4())
+        tenant_id = "tenant_001"
+        user_id = "user_001"
+        project_id = "project_001"
+        thread_id = "thread_001"
 
-    with conn.cursor() as cur:
-        cur.execute("""
-            UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=%s
-        """, (document_id,))
-        conn.commit()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO documents
+                (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
+                ON CONFLICT (document_id) DO UPDATE
+                    SET status='in-progress', updated_at=NOW()
+            """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
+            conn.commit()
 
-    # Trigger KB sync
+        # Embed + store chunks
+        for chunk_index, chunk in chunk_text(document_text):
+            metadata = {
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "project_id": project_id,
+                "thread_id": thread_id,
+                "chunk_index": chunk_index
+            }
+            embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata)
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=%s
+            """, (document_id,))
+            conn.commit()
+
+        processed_files.append(key)
+        print(f"[INFO] Ingested {key} successfully")
+
+    # Trigger KB sync once after processing all files
     try:
         start_kb_sync()
     except Exception as e:
         print(f"[WARN] KB sync failed: {e}")
 
     conn.close()
-    return {"statusCode": 200, "body": f"Ingested {key} successfully and triggered KB sync"}
+    return {
+        "statusCode": 200,
+        "body": f"Ingested files: {processed_files} and triggered KB sync"
+    }
