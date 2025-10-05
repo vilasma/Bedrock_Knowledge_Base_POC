@@ -16,3 +16,4 @@ typing_extensions
 six
 aioboto3 
 aiobotocore
+aiohttp
