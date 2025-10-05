@@ -19,6 +19,7 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
 KB_ID = os.environ.get('KB_ID')  # KB ID passed as environment variable
+DataSourceId = os.environ.get('DataSourceId')
 
 # ------------------ Clients ------------------
 s3_client = boto3.client('s3', region_name=REGION)
@@ -93,14 +94,13 @@ def start_kb_sync():
     if not KB_ID:
         print("[WARN] KB_ID not set, skipping sync")
         return
-    client = boto3.client("bedrock", region_name=os.environ.get("REGION", "us-east-1"))
+    client = boto3.client("bedrock-agent", region_name=os.environ.get("REGION", "us-east-1"))
     try:
-        client.start_knowledge_base_sync(KnowledgeBaseId=KB_ID)
+        client.start_ingestion_job(knowledgeBaseId=KB_ID, dataSourceId=DataSourceId)
         print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
     except AttributeError as e:
         print(f"[ERROR] KB sync failed: {e}")
 
-# ------------------ Lambda Handler ------------------
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
     if 'Records' not in event:

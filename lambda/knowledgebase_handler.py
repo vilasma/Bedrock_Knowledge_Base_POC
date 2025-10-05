@@ -14,6 +14,7 @@ DB_SECRET_ARN = os.environ.get('DB_SECRET_ARN')
 REGION = os.environ.get('REGION', 'us-east-1')
 TOP_K = int(os.environ.get('TOP_K', 5))
 KB_ID = os.environ.get('KB_ID')
+DataSourceId = os.environ.get('DataSourceId')
 
 # ---------------- DB Helpers ----------------
 def get_db_credentials(secret_arn):
@@ -92,9 +93,9 @@ def start_kb_sync():
     if not KB_ID:
         print("[WARN] KB_ID not set, skipping sync")
         return
-    client = boto3.client("bedrock", region_name=os.environ.get("REGION", "us-east-1"))
+    client = boto3.client("bedrock-agent", region_name=os.environ.get("REGION", "us-east-1"))
     try:
-        client.start_knowledge_base_sync(KnowledgeBaseId=KB_ID)
+        client.start_ingestion_job(knowledgeBaseId=KB_ID, dataSourceId=DataSourceId)
         print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
     except AttributeError as e:
         print(f"[ERROR] KB sync failed: {e}")

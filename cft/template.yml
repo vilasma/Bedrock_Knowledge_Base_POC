@@ -348,6 +348,7 @@ Resources:
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           TOP_K: 5
           KB_ID: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
+          DataSourceId: !Ref KnowledgeBaseDataSource
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
@@ -413,15 +414,19 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
+              - Sid: BedrockKnowledgeBaseIngestion
+                Effect: Allow
                 Action:
-                  - s3:ListBucket
-                Resource:
-                  - arn:aws:s3:::bedrock-ingest-bucket
+                  - bedrock:StartIngestionJob
+                  - bedrock:GetIngestionJob
+                  - bedrock:ListIngestionJobs
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${KnowledgeBaseName}*
               - Effect: Allow
                 Action:
                   - s3:GetObject
+                  - s3:ListBucket
                 Resource:
+                  - arn:aws:s3:::bedrock-ingest-bucket
                   - arn:aws:s3:::bedrock-ingest-bucket/*
               - Effect: Allow
                 Action:

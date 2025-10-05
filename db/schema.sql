@@ -46,6 +46,8 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 
 ALTER EXTENSION vector UPDATE;
 
+
+select * from documents;
 select document_name, document_id, chunk_text from document_chunks limit 1000;
 
 
