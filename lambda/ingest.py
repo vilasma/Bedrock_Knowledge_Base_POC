@@ -7,7 +7,6 @@ import psycopg2
 import pdfplumber
 import docx
 from datetime import datetime
-from pdfminer.pdfinterp import PDFInterpreterError
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
@@ -19,12 +18,12 @@ DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
+KB_ID = os.environ.get('KB_ID')  # KB ID passed as environment variable
 
 # ------------------ Clients ------------------
 s3_client = boto3.client('s3', region_name=REGION)
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
-bedrock_client_kb = boto3.client('bedrock', region_name=REGION)
 
 # ------------------ Helpers ------------------
 def get_db_credentials(secret_arn):
@@ -55,8 +54,6 @@ def extract_text_from_s3(bucket, key):
             return "\n".join([para.text for para in doc.paragraphs])
         else:
             return raw_bytes.decode('utf-8', errors='ignore')
-    except PDFInterpreterError:
-        return ""
     except Exception as e:
         print(f"[ERROR] Failed to extract text: {e}")
         return ""
@@ -92,17 +89,12 @@ def embed_and_store_chunk(conn, document_id, document_name, chunk_index, chunk_t
         """, (document_id, document_name, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow()))
         conn.commit()
 
-def get_kb_id(name="poc-bedrock-kb"):
-    paginator = bedrock_client_kb.get_paginator("list_knowledge_bases")
-    for page in paginator.paginate():
-        for kb in page.get("KnowledgeBases", []):
-            if kb["Name"] == name:
-                return kb["KnowledgeBaseId"]
-    raise Exception(f"Knowledge Base '{name}' not found")
-
-def start_kb_sync(kb_id):
-    bedrock_client_kb.start_knowledge_base_sync(KnowledgeBaseId=kb_id)
-    print(f"[INFO] Knowledge Base sync started for KB ID: {kb_id}")
+def start_kb_sync():
+    if not KB_ID:
+        print("[WARN] KB_ID not set, skipping sync")
+        return
+    bedrock_client.start_knowledge_base_sync(KnowledgeBaseId=KB_ID)
+    print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
 
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
@@ -150,8 +142,10 @@ def lambda_handler(event, context):
         conn.commit()
 
     # Trigger KB sync
-    kb_id = get_kb_id()
-    start_kb_sync(kb_id)
+    try:
+        start_kb_sync()
+    except Exception as e:
+        print(f"[WARN] KB sync failed: {e}")
 
     conn.close()
     return {"statusCode": 200, "body": f"Ingested {key} successfully and triggered KB sync"}
