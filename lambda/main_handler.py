@@ -1,32 +1,16 @@
 import os
-import logging
-from ingest import lambda_handler as ingest_handler
-from knowledgebase_handler import lambda_handler as kb_handler
+import asyncio
+from ingest import async_handler as ingest_async
+from knowledgebase_handler import async_handler as kb_async
 
-logging.basicConfig(level=logging.INFO)
+async def async_main_handler(event, context):
+    # Step 1: Ingest document if provided
+    ingest_response = None
+    if "bucket" in event and "key" in event:
+        ingest_response = await ingest_async(event, context)
 
-def lambda_handler(event, context):
-    # If triggered by S3, set bucket/key in environment
-    if 'Records' in event and len(event['Records']) > 0:
-        record = event['Records'][0]['s3']
-        os.environ["CURRENT_S3_BUCKET"] = record['bucket']['name']
-        os.environ["CURRENT_S3_KEY"] = record['object']['key']
-
-    # Step 1: Ingest document
-    try:
-        ingest_response = ingest_handler(event, context)
-        logging.info(f"Ingest response: {ingest_response}")
-    except Exception as e:
-        logging.error(f"Ingest failed: {e}")
-        return {"statusCode": 500, "body": f"Ingest failed: {e}"}
-
-    # Step 2: Query knowledge base (example)
-    try:
-        kb_response = kb_handler(event, context)
-        logging.info(f"KB response: {kb_response}")
-    except Exception as e:
-        logging.error(f"KnowledgeBase query failed: {e}")
-        return {"statusCode": 500, "body": f"KB query failed: {e}"}
+    # Step 2: Query knowledge base
+    kb_response = await kb_async(event, context)
 
     return {
         "statusCode": 200,
@@ -35,3 +19,6 @@ def lambda_handler(event, context):
             "knowledgebase": kb_response
         }
     }
+
+def lambda_handler(event, context):
+    return asyncio.run(async_main_handler(event, context))

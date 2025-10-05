@@ -1,98 +1,68 @@
 import os
-import psycopg2
 import json
-import ast
-import boto3
+import asyncio
+import aioboto3
+import asyncpg
 
-# --------------------- ENV ---------------------
 DB_HOST = os.environ['DB_HOST']
-DB_PORT = os.environ['DB_PORT']
+DB_PORT = int(os.environ['DB_PORT'])
 DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 TOP_K = int(os.environ.get('TOP_K', 5))
 
-# --------------------- CLIENTS ---------------------
-bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
-secrets_client = boto3.client('secretsmanager', region_name=REGION)
+async def get_db_credentials(secret_arn):
+    session = aioboto3.Session()
+    async with session.client('secretsmanager', region_name=REGION) as secrets_client:
+        secret = await secrets_client.get_secret_value(SecretId=secret_arn)
+        creds = json.loads(secret['SecretString'])
+        return creds['username'], creds['password']
 
-# --------------------- HELPERS ---------------------
-def get_db_credentials(secret_arn):
-    secret = secrets_client.get_secret_value(SecretId=secret_arn)
-    creds = json.loads(secret['SecretString'])
-    return creds['username'], creds['password']
-
-def get_query_embedding(query_text):
-    response = bedrock_client.invoke_model(
-        modelId="amazon.titan-embed-text-v1",
-        body=json.dumps({"inputText": query_text}),
-        contentType="application/json",
-        accept="application/json"
-    )
-    result = json.loads(response['body'].read())
-    return result['embedding']
-
-def parse_embedding(embedding):
-    """
-    Convert embedding string from DB to list of floats.
-    If already a list, return as floats.
-    """
-    if isinstance(embedding, str):
-        # Safe parsing of string like '[0.1, 0.2, ...]'
-        embedding = ast.literal_eval(embedding)
-    return [float(x) for x in embedding]
-
-def cosine_similarity(a, b):
-    """
-    Compute cosine similarity between two vectors (lists of floats).
-    """
-    dot = sum(x*y for x, y in zip(a, b))
-    norm_a = sum(x*x for x in a) ** 0.5
-    norm_b = sum(y*y for y in b) ** 0.5
-    return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
-
-# --------------------- LAMBDA HANDLER ---------------------
-def lambda_handler(event, context):
-    # 1. Connect to PostgreSQL
-    username, password = get_db_credentials(DB_SECRET_ARN)
-    conn = psycopg2.connect(
+async def get_db_pool():
+    username, password = await get_db_credentials(DB_SECRET_ARN)
+    return await asyncpg.create_pool(
         host=DB_HOST,
         port=DB_PORT,
-        dbname=DB_NAME,
+        database=DB_NAME,
         user=username,
-        password=password
+        password=password,
+        min_size=1,
+        max_size=10
     )
-    cur = conn.cursor()
 
-    # 2. Extract query and optional filters
+async def get_query_embedding(text):
+    session = aioboto3.Session()
+    async with session.client('bedrock-runtime', region_name=REGION) as client:
+        response = await client.invoke_model(
+            modelId="amazon.titan-embed-text-v1",
+            body=json.dumps({"inputText": text}),
+            contentType="application/json",
+            accept="application/json"
+        )
+        result = json.loads(await response['body'].read())
+        return result['embedding']
+
+async def query_top_k(pool, query_text):
+    query_embedding = await get_query_embedding(query_text)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(f"""
+            SELECT chunk_text, metadata, embedding_vector <#> $1 AS similarity
+            FROM document_chunks
+            WHERE status='completed'
+            ORDER BY embedding_vector <#> $1
+            LIMIT {TOP_K}
+        """, query_embedding)
+        return [
+            {"chunk_text": r["chunk_text"], "metadata": r["metadata"], "similarity": r["similarity"]}
+            for r in rows
+        ]
+
+async def async_handler(event, context):
+    pool = await get_db_pool()
     query_text = event.get("query", "Retrieve relevant chunks")
-    filters = event.get("filters", {})
-
-    # 3. Get embedding for query
-    query_embedding = parse_embedding(get_query_embedding(query_text))
-
-    # 4. Fetch all completed chunks
-    sql = "SELECT chunk_text, embedding_vector, metadata FROM document_chunks WHERE status='completed'"
-    cur.execute(sql)
-    rows = cur.fetchall()
-
-    # 5. Compute similarity
-    results = []
-    for chunk_text, embedding_vector, metadata in rows:
-        embedding_vector = parse_embedding(embedding_vector)
-        similarity = cosine_similarity(query_embedding, embedding_vector)
-        results.append({
-            "chunk_text": chunk_text,
-            "metadata": metadata,
-            "similarity": similarity
-        })
-
-    # 6. Sort by similarity and take top K
-    results.sort(key=lambda x: x["similarity"], reverse=True)
-    top_results = results[:TOP_K]
-
-    # 7. Close DB connection
-    cur.close()
-    conn.close()
-
+    top_results = await query_top_k(pool, query_text)
+    await pool.close()
     return {"statusCode": 200, "body": json.dumps(top_results)}
+
+def lambda_handler(event, context):
+    return asyncio.run(async_handler(event, context))
