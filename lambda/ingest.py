@@ -8,6 +8,8 @@ import pdfplumber
 import docx
 from datetime import datetime
 import warnings
+import time
+from botocore.exceptions import ClientError
 
 warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
 
@@ -95,11 +97,21 @@ def start_kb_sync():
         print("[WARN] KB_ID not set, skipping sync")
         return
     client = boto3.client("bedrock-agent", region_name=os.environ.get("REGION", "us-east-1"))
-    try:
-        client.start_ingestion_job(knowledgeBaseId=KB_ID, dataSourceId=DataSourceId)
-        print(f"[INFO] Knowledge Base sync started for KB ID: {KB_ID}")
-    except AttributeError as e:
-        print(f"[ERROR] KB sync failed: {e}")
+    for attempt in range(5):
+        try:
+            resp = client.start_ingestion_job(
+                knowledgeBaseId=KB_ID,
+                dataSourceId=DataSourceId
+            )
+            print("Started ingestion job:", resp["ingestionJob"]["ingestionJobId"])
+            return resp
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConflictException":
+                print(f"Ingestion already running. Retrying in 60 s...")
+                time.sleep(60)
+            else:
+                raise
+    raise TimeoutError("Max retries reached while waiting for ingestion slot.")
 
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):

@@ -71,7 +71,8 @@ def lambda_handler(event, context):
             metadata JSONB,
             status TEXT NOT NULL DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
+            updated_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT document_chunks_doc_unique UNIQUE (document_id, chunk_index)
         );
         """
         cur.execute(create_tables_query)
