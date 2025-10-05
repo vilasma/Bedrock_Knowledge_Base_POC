@@ -1,22 +1,12 @@
 import os
 import io
 import json
+import uuid
 import boto3
 import psycopg2
-import chardet
 import pdfplumber
 import docx
-import uuid
-import logging
-import warnings
 from datetime import datetime
-from pdfminer.pdfinterp import PDFInterpreterError
-
-# ------------------ Logging and Warning Suppression ------------------
-logging.getLogger("pdfminer").setLevel(logging.ERROR)
-
-# Suppress benign warnings (but NOT exceptions like PDFInterpreterError)
-warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
 
 # ------------------ Environment ------------------
 DB_HOST = os.environ['DB_HOST']
@@ -48,21 +38,16 @@ def extract_text_from_s3(bucket, key):
     s3_obj = s3_client.get_object(Bucket=bucket, Key=key)
     raw_bytes = s3_obj['Body'].read()
     ext = key.split('.')[-1].lower()
-
     try:
         if ext == 'pdf':
             with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
-                return "\n".join([page.extract_text() or "" for page in pdf.pages]).strip()
+                return "\n".join([page.extract_text() or "" for page in pdf.pages])
         elif ext == 'docx':
             doc = docx.Document(io.BytesIO(raw_bytes))
-            return "\n".join([para.text for para in doc.paragraphs])
+            return "\n".join([p.text for p in doc.paragraphs])
         else:
-            encoding = chardet.detect(raw_bytes)['encoding'] or 'utf-8'
-            return raw_bytes.decode(encoding, errors='ignore')
-    except PDFInterpreterError:
-        return ""
-    except Exception as e:
-        print(f"[ERROR] Failed to extract text: {e}")
+            return raw_bytes.decode('utf-8', errors='ignore')
+    except Exception:
         return ""
 
 def chunk_text(text, chunk_size=CHUNK_SIZE):
@@ -70,23 +55,22 @@ def chunk_text(text, chunk_size=CHUNK_SIZE):
     for i in range(0, len(words), chunk_size):
         yield i // chunk_size, " ".join(words[i:i + chunk_size])
 
-def get_query_embedding(query_text):
+def get_query_embedding(text):
     response = bedrock_client.invoke_model(
         modelId="amazon.titan-embed-text-v1",
-        body=json.dumps({"inputText": query_text}),
+        body=json.dumps({"inputText": text}),
         contentType="application/json",
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    return result['embedding']
+    return result['embedding']  # Python list
 
 # ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
-    # Use CURRENT_S3_BUCKET and CURRENT_S3_KEY injected by main Lambda
     bucket = os.environ.get("CURRENT_S3_BUCKET")
     key = os.environ.get("CURRENT_S3_KEY")
     if not bucket or not key:
-        return {"statusCode": 400, "body": "S3 bucket/key not found in environment"}
+        return {"statusCode": 400, "body": "S3 bucket/key not found"}
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -96,12 +80,9 @@ def lambda_handler(event, context):
         return {"statusCode": 200, "body": f"No readable text in {key}"}
 
     document_id = str(uuid.uuid4())
-    tenant_id = "tenant_001"
-    user_id = "user_001"
-    project_id = "project_001"
-    thread_id = "thread_001"
+    tenant_id, user_id, project_id, thread_id = "tenant_001", "user_001", "project_001", "thread_001"
 
-    # Insert document record
+    # Insert document
     cur.execute("""
         INSERT INTO documents (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
@@ -112,19 +93,8 @@ def lambda_handler(event, context):
 
     # Embed chunks
     for chunk_index, chunk in chunk_text(document_text):
-        try:
-            embedding_vector = get_query_embedding(chunk)
-        except Exception as e:
-            print(f"[ERROR] Chunk {chunk_index}: {e}")
-            continue
-
-        metadata = {
-            "tenant_id": tenant_id,
-            "user_id": user_id,
-            "project_id": project_id,
-            "thread_id": thread_id,
-            "chunk_index": chunk_index
-        }
+        embedding_vector = get_query_embedding(chunk)
+        metadata = {"tenant_id": tenant_id, "user_id": user_id, "project_id": project_id, "thread_id": thread_id, "chunk_index": chunk_index}
 
         cur.execute("""
             INSERT INTO document_chunks (document_id, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
