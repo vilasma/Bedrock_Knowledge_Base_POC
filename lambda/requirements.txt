@@ -14,9 +14,3 @@ lxml
 pillow
 typing_extensions
 six
-
-fastapi
-uvicorn
-openai
-gradio
-python-dotenv
