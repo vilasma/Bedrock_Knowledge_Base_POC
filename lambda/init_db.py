@@ -93,8 +93,7 @@ def lambda_handler(event, context):
             status TEXT NOT NULL DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW(),
-            CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index),
-            CONSTRAINT unique_document_id UNIQUE (document_id)    
+            CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index)
         );
         """)
         conn.commit()
