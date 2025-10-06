@@ -20,8 +20,8 @@ DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
-KB_ID = os.environ.get('KB_ID')  # KB ID passed as environment variable
-DataSourceId = os.environ.get('DataSourceId')
+KB_ID = os.environ.get('KB_ID')
+DATA_SOURCE_ID = os.environ.get('DataSourceId')
 
 # ------------------ Clients ------------------
 s3_client = boto3.client('s3', region_name=REGION)
@@ -76,20 +76,24 @@ def get_query_embedding(text):
     result = json.loads(response['body'].read())
     return result['embedding']
 
-def embed_and_store_chunk(conn, document_id, document_name, chunk_index, chunk_text, metadata):
+def embed_and_store_chunk(conn, document_id, document_name, chunk_index, chunk_text, metadata_id, metadata):
     embedding_vector = get_query_embedding(chunk_text)
     with conn.cursor() as cur:
         cur.execute("""
             INSERT INTO document_chunks
-            (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
-            VALUES (%s, %s, %s, %s, %s::vector, %s, 'completed', %s)
-            ON CONFLICT (document_id, chunk_index) DO UPDATE
-            SET chunk_text = EXCLUDED.chunk_text,
-                embedding_vector = EXCLUDED.embedding_vector,
-                metadata = EXCLUDED.metadata,
-                status = 'completed',
-                updated_at = NOW()
-        """, (document_id, document_name, chunk_index, chunk_text, embedding_vector, json.dumps(metadata), datetime.utcnow()))
+            (chunk_id, document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata_id, metadata, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s::vector, %s, %s, 'completed', %s)
+        """, (
+            str(uuid.uuid4()),
+            document_id,
+            document_name,
+            chunk_index,
+            chunk_text,
+            embedding_vector,
+            metadata_id,
+            json.dumps(metadata),
+            datetime.utcnow()
+        ))
         conn.commit()
 
 def start_kb_sync():
@@ -101,7 +105,7 @@ def start_kb_sync():
         try:
             resp = client.start_ingestion_job(
                 knowledgeBaseId=KB_ID,
-                dataSourceId=DataSourceId
+                dataSourceId=DATA_SOURCE_ID
             )
             print("Started ingestion job:", resp["ingestionJob"]["ingestionJobId"])
             return resp
@@ -119,9 +123,8 @@ def lambda_handler(event, context):
         return {"statusCode": 400, "body": "No S3 records found in event"}
 
     processed_files = []
-
     conn = get_db_connection()
-    
+
     for record in event['Records']:
         bucket = record['s3']['bucket']['name']
         key = record['s3']['object']['key']
@@ -131,32 +134,44 @@ def lambda_handler(event, context):
             print(f"[INFO] No readable text in {key}")
             continue
 
+        # Unique IDs for each upload
         document_id = str(uuid.uuid4())
-        tenant_id = "tenant_001"
-        user_id = "user_001"
-        project_id = "project_001"
-        thread_id = "thread_001"
+        metadata_id = str(uuid.uuid4())
+
+        # Dynamic metadata (in future, can come from event or tags)
+        tenant_id = f"tenant_{uuid.uuid4().hex[:6]}"
+        user_id = f"user_{uuid.uuid4().hex[:6]}"
+        project_id = f"project_{uuid.uuid4().hex[:6]}"
+        thread_id = f"thread_{uuid.uuid4().hex[:6]}"
 
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO documents
-                (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
-                ON CONFLICT (document_id) DO UPDATE
-                SET status='in-progress', updated_at=NOW()
-            """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
+                (document_id, document_name, tenant_id, user_id, project_id, thread_id, metadata_id, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'in-progress', %s)
+            """, (
+                document_id,
+                key,
+                tenant_id,
+                user_id,
+                project_id,
+                thread_id,
+                metadata_id,
+                datetime.utcnow()
+            ))
             conn.commit()
 
         # Embed + store chunks
         for chunk_index, chunk in chunk_text(document_text):
             metadata = {
+                "metadata_id": metadata_id,
                 "tenant_id": tenant_id,
                 "user_id": user_id,
                 "project_id": project_id,
                 "thread_id": thread_id,
                 "chunk_index": chunk_index
             }
-            embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata)
+            embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata_id, metadata)
 
         with conn.cursor() as cur:
             cur.execute("""
@@ -165,9 +180,9 @@ def lambda_handler(event, context):
             conn.commit()
 
         processed_files.append(key)
-        print(f"[INFO] Ingested {key} successfully")
+        print(f"[INFO] Ingested {key} successfully with metadata_id={metadata_id}")
 
-    # Trigger KB sync once after processing all files
+    # Trigger KB sync once
     try:
         start_kb_sync()
     except Exception as e:
@@ -176,5 +191,5 @@ def lambda_handler(event, context):
     conn.close()
     return {
         "statusCode": 200,
-        "body": f"Ingested files: {processed_files} and triggered KB sync"
+        "body": f"Ingested files: {processed_files} with unique metadata and triggered KB sync"
     }

@@ -64,6 +64,7 @@ def lambda_handler(event, context):
         create_tables_query = """
         CREATE TABLE IF NOT EXISTS documents (
             document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            metadata_id UUID REFERENCES metadata(metadata_id) ON DELETE CASCADE,
             tenant_id TEXT NOT NULL,
             user_id TEXT NOT NULL,
             project_id TEXT,
