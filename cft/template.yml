@@ -358,6 +358,7 @@ Resources:
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: us-east-1
+          RESET_DB: "true"   # Set to "true" to drop & recreate tables
 
   
   ### SINGLE Lambda Function

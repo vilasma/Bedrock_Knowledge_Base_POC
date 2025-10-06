@@ -9,6 +9,7 @@ DB_PORT = os.environ['DB_PORT']
 DB_NAME = os.environ['DB_NAME']
 DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 REGION = os.environ.get('REGION', 'us-east-1')
+RESET_DB = os.environ.get('RESET_DB', 'false').lower() == 'true'
 
 # ------------------ Secrets Manager ------------------
 def get_db_credentials(secret_arn):
@@ -21,9 +22,10 @@ def get_db_credentials(secret_arn):
 def lambda_handler(event, context):
     result = {
         "message": "",
+        "tables_reset": RESET_DB,
         "unique_constraints": [],
         "duplicates_removed": 0,
-        "existing_documents": 0
+        "table_counts": {}
     }
 
     try:
@@ -46,7 +48,18 @@ def lambda_handler(event, context):
         conn.commit()
 
         # ===============================
-        # 2️⃣ Create Tables (idempotent)
+        # 2️⃣ Drop tables if RESET_DB is True
+        # ===============================
+        if RESET_DB:
+            cur.execute("""
+            DROP TABLE IF EXISTS document_chunks CASCADE;
+            DROP TABLE IF EXISTS metadata CASCADE;
+            DROP TABLE IF EXISTS documents CASCADE;
+            """)
+            conn.commit()
+
+        # ===============================
+        # 3️⃣ Create Tables
         # ===============================
         create_tables_query = """
         CREATE TABLE IF NOT EXISTS documents (
@@ -61,6 +74,18 @@ def lambda_handler(event, context):
             updated_at TIMESTAMP DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS metadata (
+            metadata_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            project_id TEXT,
+            thread_id TEXT,
+            document_id UUID REFERENCES documents(document_id) ON DELETE CASCADE,
+            metadata JSONB,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS document_chunks (
             chunk_id SERIAL PRIMARY KEY,
             document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
@@ -68,18 +93,19 @@ def lambda_handler(event, context):
             chunk_text TEXT NOT NULL,
             document_name TEXT NOT NULL,
             embedding_vector VECTOR(1536) NOT NULL,
+            metadata_id UUID REFERENCES metadata(metadata_id) ON DELETE CASCADE,
             metadata JSONB,
             status TEXT NOT NULL DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW(),
-            CONSTRAINT document_chunks_doc_unique UNIQUE (document_id, chunk_index)
+            CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index)
         );
         """
         cur.execute(create_tables_query)
         conn.commit()
 
         # ===============================
-        # 3️⃣ Remove duplicate chunks (if any)
+        # 4️⃣ Remove duplicate chunks
         # ===============================
         cur.execute("""
             DELETE FROM document_chunks a
@@ -88,14 +114,13 @@ def lambda_handler(event, context):
               AND a.document_id = b.document_id
               AND a.chunk_index = b.chunk_index;
         """)
-        duplicates_removed = cur.rowcount
+        result["duplicates_removed"] = cur.rowcount
         conn.commit()
-        result["duplicates_removed"] = duplicates_removed
 
         # ===============================
-        # 4️⃣ Ensure UNIQUE constraint on (document_id, chunk_index)
+        # 5️⃣ Ensure UNIQUE constraint
         # ===============================
-        add_constraint = """
+        cur.execute("""
         DO $$
         BEGIN
             IF NOT EXISTS (
@@ -110,14 +135,16 @@ def lambda_handler(event, context):
                 UNIQUE (document_id, chunk_index);
             END IF;
         END $$;
-        """
-        cur.execute(add_constraint)
+        """)
         conn.commit()
 
         # ===============================
-        # 5️⃣ Rebuild Indices
+        # 6️⃣ Rebuild Indices
         # ===============================
         cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_metadata_tenant_user
+            ON metadata(tenant_id, user_id);
+
         CREATE INDEX IF NOT EXISTS idx_documents_tenant
             ON documents(tenant_id);
 
@@ -136,7 +163,7 @@ def lambda_handler(event, context):
         conn.commit()
 
         # ===============================
-        # 6️⃣ Fetch Constraints & Document Count
+        # 7️⃣ Fetch Constraints
         # ===============================
         cur.execute("""
             SELECT constraint_name
@@ -146,15 +173,20 @@ def lambda_handler(event, context):
         """)
         result["unique_constraints"] = [r[0] for r in cur.fetchall()]
 
-        cur.execute("SELECT COUNT(*) FROM documents;")
-        result["existing_documents"] = cur.fetchone()[0]
+        # ===============================
+        # 8️⃣ Fetch table row counts
+        # ===============================
+        tables = ['documents', 'metadata', 'document_chunks']
+        for t in tables:
+            cur.execute(f"SELECT COUNT(*) FROM {t};")
+            result["table_counts"][t] = cur.fetchone()[0]
 
-        result["message"] = "Aurora setup complete ✅ — constraints and indices verified."
+        result["message"] = "Aurora KB setup complete ✅ — schema, constraints, indices, and table stats verified."
 
     except Exception as e:
         result["message"] = f"[ERROR] {str(e)}"
         return {"statusCode": 500, "body": json.dumps(result)}
-    
+
     finally:
         try:
             cur.close()
