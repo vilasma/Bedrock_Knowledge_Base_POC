@@ -7,13 +7,9 @@ import psycopg2
 import pdfplumber
 import docx
 from datetime import datetime
-import warnings
 import time
 from botocore.exceptions import ClientError
 
-warnings.filterwarnings("ignore", category=UserWarning, message=".*Cannot set gray.*")
-
-# ------------------ ENV ------------------
 DB_HOST = os.environ['DB_HOST']
 DB_PORT = int(os.environ['DB_PORT'])
 DB_NAME = os.environ['DB_NAME']
@@ -22,13 +18,12 @@ REGION = os.environ.get('REGION', 'us-east-1')
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 500))
 KB_ID = os.environ.get('KB_ID')
 DATA_SOURCE_ID = os.environ.get('DataSourceId')
+BATCH_SIZE = int(os.environ.get('BATCH_SIZE', 20))  # Number of chunks per embedding batch
 
-# ------------------ Clients ------------------
 s3_client = boto3.client('s3', region_name=REGION)
 secrets_client = boto3.client('secretsmanager', region_name=REGION)
 bedrock_client = boto3.client('bedrock-runtime', region_name=REGION)
 
-# ------------------ Helpers ------------------
 def get_db_credentials(secret_arn):
     secret = secrets_client.get_secret_value(SecretId=secret_arn)
     creds = json.loads(secret['SecretString'])
@@ -66,41 +61,31 @@ def chunk_text(text, chunk_size=CHUNK_SIZE):
     for i in range(0, len(words), chunk_size):
         yield i // chunk_size, " ".join(words[i:i + chunk_size])
 
-def get_query_embedding(text):
-    response = bedrock_client.invoke_model(
-        modelId="amazon.titan-embed-text-v1",
-        body=json.dumps({"inputText": text}),
-        contentType="application/json",
-        accept="application/json"
-    )
-    result = json.loads(response['body'].read())
-    return result['embedding']
-
-def embed_and_store_chunk(conn, document_id, document_name, chunk_index, chunk_text, metadata_id, metadata):
-    embedding_vector = get_query_embedding(chunk_text)
-    with conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO document_chunks
-            (chunk_id, document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata_id, metadata, status, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s::vector, %s, %s, 'completed', %s)
-        """, (
-            str(uuid.uuid4()),
-            document_id,
-            document_name,
-            chunk_index,
-            chunk_text,
-            embedding_vector,
-            metadata_id,
-            json.dumps(metadata),
-            datetime.utcnow()
-        ))
-        conn.commit()
+def get_batch_embeddings(chunks):
+    """
+    Send a batch of text chunks to Bedrock embedding model.
+    Each element in `chunks` is a dict with keys: chunk_text, document_id, chunk_index, metadata
+    Returns a list of embeddings aligned with input chunks.
+    """
+    embeddings = []
+    for start in range(0, len(chunks), BATCH_SIZE):
+        batch = chunks[start:start+BATCH_SIZE]
+        batch_texts = [c['chunk_text'] for c in batch]
+        response = bedrock_client.invoke_model(
+            modelId="amazon.titan-embed-text-v1",
+            body=json.dumps({"inputText": batch_texts}),
+            contentType="application/json",
+            accept="application/json"
+        )
+        batch_embeddings = json.loads(response['body'].read())['embedding']
+        embeddings.extend(batch_embeddings)
+    return embeddings
 
 def start_kb_sync():
     if not KB_ID:
         print("[WARN] KB_ID not set, skipping sync")
         return
-    client = boto3.client("bedrock-agent", region_name=os.environ.get("REGION", "us-east-1"))
+    client = boto3.client("bedrock-agent", region_name=REGION)
     for attempt in range(5):
         try:
             resp = client.start_ingestion_job(
@@ -117,79 +102,92 @@ def start_kb_sync():
                 raise
     raise TimeoutError("Max retries reached while waiting for ingestion slot.")
 
-# ------------------ Lambda Handler ------------------
 def lambda_handler(event, context):
     if 'Records' not in event:
         return {"statusCode": 400, "body": "No S3 records found in event"}
 
-    processed_files = []
     conn = get_db_connection()
+    processed_files = []
+    all_chunks = []
 
-    for record in event['Records']:
-        bucket = record['s3']['bucket']['name']
-        key = record['s3']['object']['key']
-
-        document_text = extract_text_from_s3(bucket, key)
-        if not document_text.strip():
-            print(f"[INFO] No readable text in {key}")
-            continue
-
-        # Unique IDs for each upload
-        document_id = str(uuid.uuid4())
-        metadata_id = str(uuid.uuid4())
-
-        # Dynamic metadata (in future, can come from event or tags)
-        tenant_id = f"tenant_{uuid.uuid4().hex[:6]}"
-        user_id = f"user_{uuid.uuid4().hex[:6]}"
-        project_id = f"project_{uuid.uuid4().hex[:6]}"
-        thread_id = f"thread_{uuid.uuid4().hex[:6]}"
-
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO documents
-                (document_id, document_name, tenant_id, user_id, project_id, thread_id, metadata_id, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'in-progress', %s)
-            """, (
-                document_id,
-                key,
-                tenant_id,
-                user_id,
-                project_id,
-                thread_id,
-                metadata_id,
-                datetime.utcnow()
-            ))
-            conn.commit()
-
-        # Embed + store chunks
-        for chunk_index, chunk in chunk_text(document_text):
-            metadata = {
-                "metadata_id": metadata_id,
-                "tenant_id": tenant_id,
-                "user_id": user_id,
-                "project_id": project_id,
-                "thread_id": thread_id,
-                "chunk_index": chunk_index
-            }
-            embed_and_store_chunk(conn, document_id, key, chunk_index, chunk, metadata_id, metadata)
-
-        with conn.cursor() as cur:
-            cur.execute("""
-                UPDATE documents SET status='completed', updated_at=NOW() WHERE document_id=%s
-            """, (document_id,))
-            conn.commit()
-
-        processed_files.append(key)
-        print(f"[INFO] Ingested {key} successfully with metadata_id={metadata_id}")
-
-    # Trigger KB sync once
     try:
-        start_kb_sync()
-    except Exception as e:
-        print(f"[WARN] KB sync failed: {e}")
+        with conn:
+            with conn.cursor() as cur:
+                # Step 1: Extract text, create documents, and prepare chunk list
+                for record in event['Records']:
+                    bucket = record['s3']['bucket']['name']
+                    key = record['s3']['object']['key']
+                    document_text = extract_text_from_s3(bucket, key)
+                    if not document_text.strip():
+                        continue
 
-    conn.close()
+                    document_id = str(uuid.uuid4())
+                    tenant_id = f"tenant_{uuid.uuid4().hex[:6]}"
+                    user_id = f"user_{uuid.uuid4().hex[:6]}"
+                    project_id = f"project_{uuid.uuid4().hex[:6]}"
+                    thread_id = f"thread_{uuid.uuid4().hex[:6]}"
+
+                    cur.execute("""
+                        INSERT INTO documents
+                        (document_id, document_name, tenant_id, user_id, project_id, thread_id, status, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'in-progress', %s)
+                    """, (document_id, key, tenant_id, user_id, project_id, thread_id, datetime.utcnow()))
+
+                    # Prepare chunk dicts for batch embedding
+                    for chunk_index, chunk_text in chunk_text(document_text):
+                        metadata = {
+                            "tenant_id": tenant_id,
+                            "user_id": user_id,
+                            "project_id": project_id,
+                            "thread_id": thread_id,
+                            "chunk_index": chunk_index
+                        }
+                        all_chunks.append({
+                            "document_id": document_id,
+                            "document_name": key,
+                            "chunk_index": chunk_index,
+                            "chunk_text": chunk_text,
+                            "metadata": metadata
+                        })
+
+                    processed_files.append(key)
+
+                # Step 2: Generate embeddings in batches
+                embeddings = get_batch_embeddings(all_chunks)
+
+                # Step 3: Insert all chunks with embeddings
+                for chunk, embedding in zip(all_chunks, embeddings):
+                    cur.execute("""
+                        INSERT INTO document_chunks
+                        (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
+                        VALUES (%s, %s, %s, %s, %s::vector, %s, 'completed', %s)
+                        """, (
+                        chunk["document_id"],
+                        chunk["document_name"],
+                        chunk["chunk_index"],
+                        chunk["chunk_text"],
+                        embedding,
+                        json.dumps(chunk["metadata"]),
+                        datetime.utcnow()
+                    ))
+
+                # Step 4: Update document status
+                for chunk in all_chunks:
+                    cur.execute("""
+                        UPDATE documents SET status='completed', updated_at=NOW() 
+                        WHERE document_id=%s
+                    """, (chunk["document_id"],))
+
+        # Trigger KB sync after all commits
+        try:
+            start_kb_sync()
+        except Exception as e:
+            print(f"[WARN] KB sync failed: {e}")
+
+    finally:
+        conn.close()
+
     return {
         "statusCode": 200,
-        "body": f"Ingested files: {processed_files} with unique metadata and triggered KB sync"
+        "body": f"Ingested files: {processed_files} with batched embeddings successfully"
     }

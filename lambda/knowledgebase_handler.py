@@ -31,7 +31,6 @@ def get_db_connection():
     else:
         username = DB_USER
         password = DB_PASSWORD
-
     return psycopg2.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -52,22 +51,27 @@ def cosine_similarity(a, b):
     norm_b = math.sqrt(sum(y*y for y in b))
     return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
 
-def get_query_embedding(text):
+def get_batch_embeddings(text_list):
+    """
+    True batch embedding using a single Titan API call.
+    Note: Titan supports 'inputText' as a list for batch embedding.
+    """
     client = boto3.client("bedrock-runtime", region_name=REGION)
+    body = {"inputText": text_list}  # List of queries
     response = client.invoke_model(
         modelId="amazon.titan-embed-text-v1",
-        body=json.dumps({"inputText": text}),
+        body=json.dumps(body),
         contentType="application/json",
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    return result['embedding']
+    # Titan returns a list of embeddings corresponding to each input
+    return result['embeddings']
 
-def query_top_chunks(query_text):
-    """Return top-K chunks for a single query"""
-    embedding = get_query_embedding(query_text)
+def query_top_chunks_batch(query_embeddings, query_texts):
     conn = get_db_connection()
     cur = conn.cursor()
+    
     cur.execute("""
         SELECT chunk_text, embedding_vector, metadata
         FROM document_chunks
@@ -77,25 +81,29 @@ def query_top_chunks(query_text):
     cur.close()
     conn.close()
 
-    results = []
-    for row in rows:
-        chunk_vector = parse_embedding(row[1])
-        similarity = cosine_similarity(embedding, chunk_vector)
-        results.append({
-            "chunk_text": row[0],
-            "metadata": row[2],
-            "similarity": similarity
-        })
+    chunk_vectors = [(row[0], parse_embedding(row[1]), row[2]) for row in rows]
 
-    results.sort(key=lambda x: x['similarity'], reverse=True)
-    return results[:TOP_K]
+    results = {}
+    for embedding, query_text in zip(query_embeddings, query_texts):
+        top_results = []
+        for chunk_text, chunk_vector, metadata in chunk_vectors:
+            similarity = cosine_similarity(embedding, chunk_vector)
+            top_results.append({
+                "chunk_text": chunk_text,
+                "metadata": metadata,
+                "similarity": similarity
+            })
+        top_results.sort(key=lambda x: x['similarity'], reverse=True)
+        results[query_text] = top_results[:TOP_K]
+
+    return results
 
 # ---------------- KB Sync ----------------
 def start_kb_sync():
     if not KB_ID:
         print("[WARN] KB_ID not set, skipping sync")
         return
-    client = boto3.client("bedrock-agent", region_name=os.environ.get("REGION", "us-east-1"))
+    client = boto3.client("bedrock-agent", region_name=REGION)
     for attempt in range(5):
         try:
             resp = client.start_ingestion_job(
@@ -114,16 +122,20 @@ def start_kb_sync():
 
 # ---------------- Lambda Handler ----------------
 def lambda_handler(event, context):
-    queries = event.get('queries') or [event.get('query', 'Retrieve relevant chunks')]
-    results = {}
+    query_texts = event.get('queries') or [event.get('query', 'Retrieve relevant chunks')]
+    
+    try:
+        # ✅ True batch embeddings
+        query_embeddings = get_batch_embeddings(query_texts)
+    except Exception as e:
+        return {"statusCode": 500, "body": f"Embedding generation failed: {e}"}
 
     try:
-        for query_text in queries:
-            top_chunks = query_top_chunks(query_text)
-            results[query_text] = top_chunks
+        results = query_top_chunks_batch(query_embeddings, query_texts)
     except Exception as e:
         return {"statusCode": 500, "body": f"DB query failed: {e}"}
 
+    # Trigger KB sync once after retrieval
     try:
         start_kb_sync()
     except Exception as e:

@@ -24,13 +24,11 @@ def lambda_handler(event, context):
         "message": "",
         "tables_reset": RESET_DB,
         "unique_constraints": [],
-        "duplicates_removed": 0,
         "table_counts": {}
     }
 
     try:
         username, password = get_db_credentials(DB_SECRET_ARN)
-
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -40,31 +38,25 @@ def lambda_handler(event, context):
         )
         cur = conn.cursor()
 
-        # ===============================
-        # 1️⃣ Enable Extensions
-        # ===============================
+        # ------------------ 1️⃣ Enable Extensions ------------------
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         conn.commit()
 
-        # ===============================
-        # 2️⃣ Drop tables if RESET_DB is True
-        # ===============================
+        # ------------------ 2️⃣ Drop tables if RESET_DB ------------------
         if RESET_DB:
             cur.execute("""
-            DROP TABLE IF EXISTS document_chunks CASCADE;
-            DROP TABLE IF EXISTS metadata CASCADE;
-            DROP TABLE IF EXISTS documents CASCADE;
+                DROP TABLE IF EXISTS document_chunks CASCADE;
+                DROP TABLE IF EXISTS metadata CASCADE;
+                DROP TABLE IF EXISTS documents CASCADE;
             """)
             conn.commit()
 
-        # ===============================
-        # 3️⃣ Create Tables
-        # ===============================
-        create_tables_query = """
+        # ------------------ 3️⃣ Create tables ------------------
+        cur.execute("""
+        -- DOCUMENTS TABLE
         CREATE TABLE IF NOT EXISTS documents (
             document_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            metadata_id UUID REFERENCES metadata(metadata_id) ON DELETE CASCADE,
             tenant_id TEXT NOT NULL,
             user_id TEXT NOT NULL,
             project_id TEXT,
@@ -75,18 +67,20 @@ def lambda_handler(event, context):
             updated_at TIMESTAMP DEFAULT NOW()
         );
 
+        -- METADATA TABLE
         CREATE TABLE IF NOT EXISTS metadata (
             metadata_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            document_id UUID REFERENCES documents(document_id) ON DELETE CASCADE,
             tenant_id TEXT NOT NULL,
             user_id TEXT NOT NULL,
             project_id TEXT,
             thread_id TEXT,
-            document_id UUID REFERENCES documents(document_id) ON DELETE CASCADE,
             metadata JSONB,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
 
+        -- DOCUMENT CHUNKS TABLE
         CREATE TABLE IF NOT EXISTS document_chunks (
             chunk_id SERIAL PRIMARY KEY,
             document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
@@ -101,47 +95,10 @@ def lambda_handler(event, context):
             updated_at TIMESTAMP DEFAULT NOW(),
             CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index)
         );
-        """
-        cur.execute(create_tables_query)
-        conn.commit()
-
-        # ===============================
-        # 4️⃣ Remove duplicate chunks
-        # ===============================
-        cur.execute("""
-            DELETE FROM document_chunks a
-            USING document_chunks b
-            WHERE a.chunk_id < b.chunk_id
-              AND a.document_id = b.document_id
-              AND a.chunk_index = b.chunk_index;
-        """)
-        result["duplicates_removed"] = cur.rowcount
-        conn.commit()
-
-        # ===============================
-        # 5️⃣ Ensure UNIQUE constraint
-        # ===============================
-        cur.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM information_schema.table_constraints
-                WHERE table_name = 'document_chunks'
-                  AND constraint_type = 'UNIQUE'
-                  AND constraint_name = 'document_chunks_unique_doc_idx'
-            ) THEN
-                ALTER TABLE document_chunks
-                ADD CONSTRAINT document_chunks_unique_doc_idx
-                UNIQUE (document_id, chunk_index);
-            END IF;
-        END $$;
         """)
         conn.commit()
 
-        # ===============================
-        # 6️⃣ Rebuild Indices
-        # ===============================
+        # ------------------ 4️⃣ Create indices ------------------
         cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_metadata_tenant_user
             ON metadata(tenant_id, user_id);
@@ -163,9 +120,7 @@ def lambda_handler(event, context):
         """)
         conn.commit()
 
-        # ===============================
-        # 7️⃣ Fetch Constraints
-        # ===============================
+        # ------------------ 5️⃣ Fetch UNIQUE constraints ------------------
         cur.execute("""
             SELECT constraint_name
             FROM information_schema.table_constraints
@@ -174,15 +129,12 @@ def lambda_handler(event, context):
         """)
         result["unique_constraints"] = [r[0] for r in cur.fetchall()]
 
-        # ===============================
-        # 8️⃣ Fetch table row counts
-        # ===============================
-        tables = ['documents', 'metadata', 'document_chunks']
-        for t in tables:
+        # ------------------ 6️⃣ Table counts ------------------
+        for t in ['documents', 'metadata', 'document_chunks']:
             cur.execute(f"SELECT COUNT(*) FROM {t};")
             result["table_counts"][t] = cur.fetchone()[0]
 
-        result["message"] = "Aurora KB setup complete ✅ — schema, constraints, indices, and table stats verified."
+        result["message"] = "Aurora KB setup complete ✅ — constraints and indices verified."
 
     except Exception as e:
         result["message"] = f"[ERROR] {str(e)}"
