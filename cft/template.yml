@@ -228,7 +228,7 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: bedrock-ingest-poc-secrets-db/creds
+      Name: bedrock-ingest-poc-secrets-db/credentials
       Description: "Credentials for Aurora PostgreSQL used by Bedrock PoC"
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
