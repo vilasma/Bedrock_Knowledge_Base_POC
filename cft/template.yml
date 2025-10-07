@@ -378,7 +378,7 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Layers:
-        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:19
+        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:63
       Code:
         S3Bucket: bedrock-ingest-bucket
         S3Key: lambda/s3_handler.zip
