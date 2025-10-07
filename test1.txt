@@ -1,0 +1,72 @@
+TXT File Uploaded in Project.
+====================================================
+Pacing Definition and Formula (Fixed)
+
+Definition:
+Pacing is the process of measuring how actual spend compares to the planned budget over a given period.
+It ensures campaigns spend evenly and efficiently across the campaign duration — avoiding under-spending (risking lost opportunities) or over-spending (exceeding the budget too early).
+
+Formula:
+Pacing (%) = (Actual Spend ÷ Planned Spend) × 100
+Planned Spend = (Total Budget ÷ Campaign Duration in Days) × Days Elapsed
+Daily Planned Spend = Total Budget ÷ Campaign Duration in Days
+
+Examples
+Example 1 – Under-Pacing
+  Total Budget = $120,000
+  Campaign Duration = 90 days
+  Daily Planned Spend = $120,000 ÷ 90 = $1,333
+  Actual Spend = $1,050
+  Pacing = (1,050 ÷ 1,333) × 100 ≈ 79% → Under-pacing
+
+Example 2 – Over-Pacing
+  Planned Daily Spend = $1,333
+  Actual Spend = $1,500
+  Pacing = (1,500 ÷ 1,333) × 100 ≈ 113% → Over-pacing
+
+Example 3 – On Pace
+  Planned Daily Spend = $1,333
+  Actual Spend = $1,333
+  Pacing = (1,333 ÷ 1,333) × 100 = 100% → On pace
+
+Example 4 – Acceptable Range
+  Planned daily spend range = $1,200 to $1,460
+  Actual Spend = $1,333
+  Pacing = (1,333 ÷ 1,333) × 100 = ≈ 90%–110% → Acceptable Range
+
+Interpretation Summary:
+  < 90%: Under-pacing → Spending too slowly
+  90–110%: On track → Spending as planned
+  > 110%: Over-pacing → Spending too quickly
+====================================================
+
+User: Can you write a short summary of how my campaigns are pacing in Oct 2025?
+Agent:
+
+Based on the October 2025 data and the pacing formula from brand artifacts, here's your campaign pacing summary:
+
+## October 2025 Campaign Pacing Summary (As of Oct 6, 2025)
+**Data Sources: Query Tool + Brand Artifacts (Pacing Definition)**
+
+### Pacing Calculation
+- **Days Elapsed**: 6 days (Oct 1-6)
+- **Actual Spend**: $2,860
+- **Planned Spend for 6 days**: $6,522 (6 days × $1,087/day target)
+- **Pacing**: ($2,860 ÷ $6,522) × 100 = **44%**
+
+### Pacing Status: 🚨 **Severely Under-Pacing**
+**Interpretation**: < 90% = Under-pacing (you're at 44%)
+
+### Current Performance:
+- **Daily average**: $477/day vs. target of $1,087/day
+- **Shortfall**: $610/day behind target
+- **Days remaining**: 25 days to correct course
+
+### Performance Metrics:
+- **Revenue**: $5,330
+- **Conversions**: 39
+- **CPA**: $73.33 (47% over $50 target)
+- **ROAS**: 1.86:1 (well below 4:1 target)
+
+### Action Required:
+With 25 days remaining, need to increase daily spend to ~$1,344/day to hit monthly targets and improve campaign efficiency to meet KPI goals.

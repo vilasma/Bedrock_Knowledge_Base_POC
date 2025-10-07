@@ -1,0 +1,49 @@
+TXT File Uploaded in Project.
+====================================================
+Q4 2025 Media Plan – Holiday Campaign
+
+Budget Allocation:
+  Facebook Ads: $50,000 (50%) > approx. $543 per day
+  Google Ads: $30,000 (30%) > approx. $326 per day
+  Amazon Ads: $20,000 (20%) > approx. $217 per day
+
+Total Q4 Budget: $100,000 > approx. $1,087 per day
+
+Campaign Goals:
+  Spend $217 to $543 per day depending on the channel.
+  Generate 2,000 conversions
+  Maintain CPA below $50
+  Achieve ROAS of 4:1
+  Target Audiences:
+    Holiday shoppers aged 25–45
+    Previous purchasers (retargeting)
+    Lookalike audiences based on top customers
+
+Creative Strategy:
+  Emphasize limited-time holiday offers
+  Use festive imagery and colors
+  Highlight free shipping and easy returns
+====================================================
+User - Show me the campaign spend and conversions for the last 7 days, and then tell me if we’re hitting our target CPA from brand artifacts.
+
+Agent - Based on the **Query Tool** data for the last 7 days and our **Brand Artifacts** targets, here's your campaign performance analysis:
+
+## 7-Day Performance Summary
+- **Total Spend**: $6,005
+- **Total Conversions**: 133
+- **Total Revenue**: $11,590
+
+## CPA Performance vs Target
+- **Actual CPA**: $45.15 ($6,005 ÷ 133 conversions)
+- **Target CPA**: <$50 (from Q4 Media Plan)
+- **Status**: ✅ **ON TARGET** - We're $4.85 under target CPA
+
+## Additional Insights
+- **ROAS**: 1.93:1 ($11,590 ÷ $6,005)
+- **Target ROAS**: 4:1 (from Q4 Media Plan)
+- **ROAS Status**: ⚠️ **BELOW TARGET** - We're achieving 48% of our target ROAS
+
+## Recommendation
+While CPA performance is strong, the low ROAS (1.93:1 vs 4:1 target) suggests we need to optimize for higher-value conversions or improve our conversion funnel to increase average order value.
+
+*Data sources: Query Tool (performance data), Brand Artifacts (Q4 Media Plan targets)*
