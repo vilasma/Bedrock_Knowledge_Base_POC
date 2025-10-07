@@ -96,7 +96,7 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file cft/template.yml \
-            --stack-name bedrock-s3-ingest-poc \
+            --stack-name bedrock-s3-ingest-db-poc \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides \
               HandlerS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \

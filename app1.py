@@ -6,7 +6,7 @@ import json
 import boto3
 
 # ------------------ Environment Variables ------------------
-DB_HOST = "bedrock-s3-ingest-poc-rdscluster-eaynvuezfc2u.cluster-cklmm6iw2i6h.us-east-1.rds.amazonaws.com"
+DB_HOST = "bedrock-s3-ingest-db-poc-rdscluster-eaynvuezfc2u.cluster-cklmm6iw2i6h.us-east-1.rds.amazonaws.com"
 DB_PORT = 5432
 DB_NAME = "bedrock_poc"
 DB_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:632944299864:secret:bedrock-poc-ingest-db-secret-ACkViW"
