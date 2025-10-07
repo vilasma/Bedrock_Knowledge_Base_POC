@@ -28,7 +28,10 @@ def lambda_handler(event, context):
     }
 
     try:
+        # Get DB credentials from Secrets Manager
         username, password = get_db_credentials(DB_SECRET_ARN)
+    
+        # Connect to Aurora PostgreSQL
         conn = psycopg2.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -37,22 +40,25 @@ def lambda_handler(event, context):
             password=password
         )
         cur = conn.cursor()
-
-        # ------------------ Enable Extensions ------------------
+    
+        # ------------------ 1️⃣ Enable Extensions ------------------
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         conn.commit()
-
-        # ------------------ Drop tables if RESET_DB ------------------
+    
+        # ------------------ 2️⃣ Drop tables if RESET_DB is true ------------------
         if RESET_DB:
+            print("Resetting DB schema as RESET_DB=True ...")
             cur.execute("""
                 DROP TABLE IF EXISTS document_chunks CASCADE;
                 DROP TABLE IF EXISTS metadata CASCADE;
                 DROP TABLE IF EXISTS documents CASCADE;
             """)
             conn.commit()
-
-        # ------------------ Create tables ------------------
+    
+        # ------------------ 3️⃣ Create Tables ------------------
+        print("Creating tables if not exist ...")
+    
         cur.execute("""
         -- DOCUMENTS TABLE
         CREATE TABLE IF NOT EXISTS documents (
@@ -66,7 +72,7 @@ def lambda_handler(event, context):
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
-
+    
         -- METADATA TABLE
         CREATE TABLE IF NOT EXISTS metadata (
             metadata_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -79,76 +85,73 @@ def lambda_handler(event, context):
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
-
+    
         -- DOCUMENT CHUNKS TABLE
         CREATE TABLE IF NOT EXISTS document_chunks (
             chunk_id SERIAL PRIMARY KEY,
             document_id UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
             chunk_index INT NOT NULL,
             chunk_text TEXT NOT NULL,
-            document_name TEXT NOT NULL,
-            embedding_vector VECTOR(1536) NOT NULL,
-            metadata_id UUID REFERENCES metadata(metadata_id) ON DELETE CASCADE,
+            embedding_vector VECTOR(1536),
             metadata JSONB DEFAULT '{}'::jsonb,
-            status TEXT NOT NULL DEFAULT 'not-started',
+            status TEXT DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
-                    
-        -- ALTER TABLE documents to ensure On CONFLICT works properly
-        ALTER TABLE document_chunks
-        ADD CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index);
         """)
         conn.commit()
-
-        # ------------------ Create indices ------------------
+    
+        # ------------------ 4️⃣ Create Indexes ------------------
+        print("Creating indexes ...")
+    
         cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_metadata_tenant_user
-            ON metadata(tenant_id, user_id);
-
-        CREATE INDEX IF NOT EXISTS idx_documents_tenant
-            ON documents(tenant_id);
-
-        CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id
-            ON document_chunks(document_id);
-
+        -- Unique index for deduplication and ON CONFLICT compatibility
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_doc_chunk
+            ON document_chunks(document_id, chunk_index);
+    
+        -- Text search index for chunk text
         CREATE INDEX IF NOT EXISTS idx_document_chunks_textsearch
             ON document_chunks USING gin (to_tsvector('simple', chunk_text));
-
+    
+        -- Vector similarity indexes
         CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_l2
             ON document_chunks USING ivfflat (embedding_vector vector_l2_ops) WITH (lists = 100);
-
+    
         CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_cosine
             ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
         """)
         conn.commit()
-
-        # ------------------ Fetch UNIQUE constraints ------------------
+    
+        # ------------------ 5️⃣ Verify Unique Indexes ------------------
         cur.execute("""
-            SELECT constraint_name
-            FROM information_schema.table_constraints
-            WHERE table_name = 'document_chunks'
-              AND constraint_type = 'UNIQUE';
+            SELECT indexname
+            FROM pg_indexes
+            WHERE tablename = 'document_chunks'
+            AND indexdef LIKE '%UNIQUE%';
         """)
-        result["unique_constraints"] = [r[0] for r in cur.fetchall()]
-
-        # ------------------ Table counts ------------------
-        for t in ['documents', 'metadata', 'document_chunks']:
-            cur.execute(f"SELECT COUNT(*) FROM {t};")
-            result["table_counts"][t] = cur.fetchone()[0]
-
-        result["message"] = "Aurora KB setup complete ✅ — tables and constraints verified."
-
+        result["unique_indexes"] = [r[0] for r in cur.fetchall()]
+    
+        # ------------------ 6️⃣ Count Rows ------------------
+        for table_name in ['documents', 'metadata', 'document_chunks']:
+            cur.execute(f"SELECT COUNT(*) FROM {table_name};")
+            result["table_counts"][table_name] = cur.fetchone()[0]
+    
+        result["message"] = "Aurora Knowledge Base initialization complete ✅"
+        print(json.dumps(result, indent=2))
+    
+        conn.commit()
+    
     except Exception as e:
         result["message"] = f"[ERROR] {str(e)}"
+        print(json.dumps(result, indent=2))
         return {"statusCode": 500, "body": json.dumps(result)}
-
+    
     finally:
         try:
             cur.close()
             conn.close()
-        except:
+        except Exception:
             pass
-
-    print(json.dumps(result, indent=2))
+    
     return {"statusCode": 200, "body": json.dumps(result)}
+    

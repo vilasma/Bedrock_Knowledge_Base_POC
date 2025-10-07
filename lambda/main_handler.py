@@ -205,8 +205,14 @@ def upsert_document_and_chunks(document_id, document_name, chunks, tenant_id, us
                     ))
 
                 sql="""
-                INSERT INTO document_chunks (document_id, document_name, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
-                VALUES (%s,%s,%s,%s,%s::vector,%s,%s,%s)
+                INSERT INTO document_chunks (document_id, chunk_index, chunk_text, embedding_vector, metadata, status, created_at)
+                VALUES (%s,%s,%s,%s::vector,%s,%s,%s)
+                ON CONFLICT (document_id, chunk_index) DO UPDATE
+                SET chunk_text=EXCLUDED.chunk_text,
+                    embedding_vector=EXCLUDED.embedding_vector,
+                    metadata=EXCLUDED.metadata,
+                    status=EXCLUDED.status,
+                    updated_at=NOW()
                 """
                 for i in range(0,len(records),BATCH_SIZE):
                     cur.executemany(sql,records[i:i+BATCH_SIZE])

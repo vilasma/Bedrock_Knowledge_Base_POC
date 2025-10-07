@@ -228,7 +228,7 @@ Resources:
   DBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: bedrock-ingest-poc-secrets-db
+      Name: bedrock-ingest-poc-secrets-db/creds
       Description: "Credentials for Aurora PostgreSQL used by Bedrock PoC"
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username":"${DBUsername}","dbname":"${DBName}"}'
@@ -360,7 +360,12 @@ Resources:
           REGION: us-east-1
           RESET_DB: "true"   # Set to "true" to drop & recreate tables
 
-  
+  InvokeInitDB:
+    Type: Custom::InvokeLambda
+    Properties:
+      ServiceToken: !GetAtt InitDBLambda.Arn
+      # No properties needed; just invokes the Lambda to initialize DB
+
   ### SINGLE Lambda Function
   S3HandlerLambda:
     Type: AWS::Lambda::Function
@@ -468,7 +473,7 @@ Resources:
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn: 
-      - InitDBLambda
+      - InvokeInitDB
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base for Aurora PostgreSQL ingestion PoC"
