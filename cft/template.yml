@@ -299,12 +299,14 @@ Resources:
               # RDS Access
               - Effect: Allow
                 Action:
+                  - rds:*
                   - rds-db:connect
                   - rds-data:ExecuteStatement
                   - rds-data:BatchExecuteStatement
                   - rds-data:BeginTransaction
                   - rds-data:CommitTransaction
                   - rds-data:RollbackTransaction
+                  - rds-data:*
                 Resource: "*"
               # Bedrock Permissions (expanded)
               - Effect: Allow
@@ -366,7 +368,9 @@ Resources:
     Type: Custom::InvokeLambda
     Properties:
       ServiceToken: !GetAtt InitDBLambda.Arn
-      # No properties needed; just invokes the Lambda to initialize DB
+      ForceUpdate: !Ref AWS::Timestamp
+      Region: !Ref AWS::Region
+    DependsOn: InitDBLambda
 
   ### SINGLE Lambda Function
   S3HandlerLambda:
