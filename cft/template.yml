@@ -368,9 +368,10 @@ Resources:
     Type: Custom::InvokeLambda
     Properties:
       ServiceToken: !GetAtt InitDBLambda.Arn
-      ForceUpdate: !Ref AWS::Timestamp
       Region: !Ref AWS::Region
-    DependsOn: InitDBLambda
+      ForceUpdate: !Ref AWS::Timestamp
+    DependsOn: 
+      - InitDBLambda
 
   ### SINGLE Lambda Function
   S3HandlerLambda:
