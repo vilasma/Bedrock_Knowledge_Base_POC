@@ -358,7 +358,7 @@ Resources:
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           REGION: us-east-1
-          RESET_DB: "false"   # Set to "true" to drop & recreate tables
+          RESET_DB: "true"   # Set to "true" to drop & recreate tables
 
   
   ### SINGLE Lambda Function
@@ -384,7 +384,7 @@ Resources:
         S3Key: lambda/s3_handler.zip
       Environment:
         Variables:
-          INPUT_S3_DIR: bedrock-ingest-bucket
+          S3_BUCKET_NAME: bedrock-ingest-bucket
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
           DB_CLUSTER_ARN: !Ref RDSCluster
@@ -395,7 +395,16 @@ Resources:
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           TOP_K: 5
           KB_ID: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
-          DataSourceId: !GetAtt KnowledgeBaseDataSource.DataSourceId
+          DATA_SOURCE_ID: !GetAtt KnowledgeBaseDataSource.DataSourceId
+          CHUNK_SIZE: 500
+          BATCH_SIZE: 20
+          MAX_WORKERS: 4
+          MAX_INGEST_RETRIES: 8
+          INGEST_RETRY_BASE_SECONDS: 5
+          S3_INGEST_PREFIX: chunks/
+          S3_INCOMING_PREFIX: bedrock-poc-docs/
+          EMBED_RETRIES: 3
+          EMBED_RETRY_SECONDS: 2
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission
@@ -492,7 +501,7 @@ Resources:
         S3Configuration:
           BucketArn: arn:aws:s3:::bedrock-ingest-bucket
           InclusionPrefixes:
-            - "bedrock-poc-docs/"
+            - "chunks/"
 
 Outputs:
   RDSClusterEndpoint:

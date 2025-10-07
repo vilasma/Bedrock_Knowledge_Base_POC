@@ -38,12 +38,12 @@ def lambda_handler(event, context):
         )
         cur = conn.cursor()
 
-        # ------------------ 1️⃣ Enable Extensions ------------------
+        # ------------------ Enable Extensions ------------------
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
         conn.commit()
 
-        # ------------------ 2️⃣ Drop tables if RESET_DB ------------------
+        # ------------------ Drop tables if RESET_DB ------------------
         if RESET_DB:
             cur.execute("""
                 DROP TABLE IF EXISTS document_chunks CASCADE;
@@ -52,7 +52,7 @@ def lambda_handler(event, context):
             """)
             conn.commit()
 
-        # ------------------ 3️⃣ Create tables ------------------
+        # ------------------ Create tables ------------------
         cur.execute("""
         -- DOCUMENTS TABLE
         CREATE TABLE IF NOT EXISTS documents (
@@ -75,7 +75,7 @@ def lambda_handler(event, context):
             user_id TEXT NOT NULL,
             project_id TEXT,
             thread_id TEXT,
-            metadata JSONB,
+            metadata JSONB DEFAULT '{}'::jsonb,
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
@@ -89,16 +89,19 @@ def lambda_handler(event, context):
             document_name TEXT NOT NULL,
             embedding_vector VECTOR(1536) NOT NULL,
             metadata_id UUID REFERENCES metadata(metadata_id) ON DELETE CASCADE,
-            metadata JSONB,
+            metadata JSONB DEFAULT '{}'::jsonb,
             status TEXT NOT NULL DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW(),
-            CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index)
+            updated_at TIMESTAMP DEFAULT NOW()
         );
+                    
+        -- ALTER TABLE documents to ensure On CONFLICT works properly
+        ALTER TABLE document_chunks
+        ADD CONSTRAINT document_chunks_unique_doc_idx UNIQUE (document_id, chunk_index);
         """)
         conn.commit()
 
-        # ------------------ 4️⃣ Create indices ------------------
+        # ------------------ Create indices ------------------
         cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_metadata_tenant_user
             ON metadata(tenant_id, user_id);
@@ -120,7 +123,7 @@ def lambda_handler(event, context):
         """)
         conn.commit()
 
-        # ------------------ 5️⃣ Fetch UNIQUE constraints ------------------
+        # ------------------ Fetch UNIQUE constraints ------------------
         cur.execute("""
             SELECT constraint_name
             FROM information_schema.table_constraints
@@ -129,12 +132,12 @@ def lambda_handler(event, context):
         """)
         result["unique_constraints"] = [r[0] for r in cur.fetchall()]
 
-        # ------------------ 6️⃣ Table counts ------------------
+        # ------------------ Table counts ------------------
         for t in ['documents', 'metadata', 'document_chunks']:
             cur.execute(f"SELECT COUNT(*) FROM {t};")
             result["table_counts"][t] = cur.fetchone()[0]
 
-        result["message"] = "Aurora KB setup complete ✅ — constraints and indices verified."
+        result["message"] = "Aurora KB setup complete ✅ — tables and constraints verified."
 
     except Exception as e:
         result["message"] = f"[ERROR] {str(e)}"
