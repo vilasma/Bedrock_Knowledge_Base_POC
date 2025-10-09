@@ -542,7 +542,7 @@ Resources:
               {
                 "ResourceType":"collection",
                 "Resource":[
-                "collection/kb-sync-data"
+                "collection/kb-chunks"
                 ],
                 "Permission":[
                 "aoss:*"
@@ -565,7 +565,7 @@ Resources:
           "Rules": [
             {
               "ResourceType": "collection",
-              "Resource": ["collection/kb-sync-data"]
+              "Resource": ["collection/kb-chunks"]
             }
           ],
           "AWSOwnedKey": true
