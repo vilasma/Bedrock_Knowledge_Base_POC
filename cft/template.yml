@@ -481,22 +481,13 @@ Resources:
                   - bedrock:InvokeModel
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
 
-  # ---------------- OpenSearch Collection ----------------
-  # ---------------- OpenSearch Serverless Collection ----------------
-  OpenSearchCollection:
-    Type: AWS::OpenSearchServerless::Collection
-    Properties:
-      Name: kb-chunks
-      Type: VECTORSEARCH
-      Description: "OpenSearch Serverless collection for knowledge base indexing"
-
   # ---------------- Encryption Security Policy ----------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
       Name: kb-chunks-encryption
       Type: encryption
-      Policy: !Sub |
+      Policy: |
         {
           "Rules": [
             {
@@ -506,6 +497,17 @@ Resources:
           ],
           "AWSOwnedKey": true
         }
+
+  # ---------------- OpenSearch Serverless Collection ----------------
+  OpenSearchCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    DependsOn: OpenSearchEncryptionPolicy
+    Properties:
+      Name: kb-chunks
+      Type: VECTORSEARCH
+      Description: "OpenSearch Serverless collection for knowledge base indexing"
+      SecurityPolicyIds:
+        - !Ref OpenSearchEncryptionPolicy
 
   # ---------------- Network Security Policy ----------------
   OpenSearchNetworkPolicy:
