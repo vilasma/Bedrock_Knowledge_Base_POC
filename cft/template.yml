@@ -592,7 +592,7 @@ Resources:
       - OpenSearchCollectionIndex
       - OpenSearchDataAccessPolicy
       - OpenSearchEncryptionPolicy
-      - OpenSearchEncryptionNetworkPolicy
+      - OpenSearchNetworkPolicy
       - BedrockKnowledgeBaseRole
     Properties:
       Name: poc-bedrock-kb
