@@ -480,6 +480,26 @@ Resources:
                 Action:
                   - bedrock:InvokeModel
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
+              
+              # OpenSearch Serverless Permissions
+              - Effect: Allow
+                Action:
+                  - aoss:CreateCollection
+                  - aoss:DescribeCollection
+                  - aoss:UpdateCollection
+                  - aoss:DeleteCollection
+                  - aoss:BatchPutDocument
+                  - aoss:BatchDeleteDocument
+                  - aoss:VectorSearch
+                  - aoss:ReadDocument
+                  - aoss:ListCollections
+                Resource: !GetAtt OpenSearchCollection.Arn
+
+              # OpenSearch API Access
+              - Effect: Allow
+                Action:
+                  - aoss:APIAccessAll
+                Resource: !GetAtt OpenSearchCollection.Arn
 
   # ---------------- Encryption Security Policy ----------------
   OpenSearchEncryptionPolicy:
