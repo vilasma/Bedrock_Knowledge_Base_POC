@@ -415,6 +415,7 @@ Resources:
           S3_INCOMING_PREFIX: bedrock-poc-docs/
           EMBED_RETRIES: 3
           EMBED_RETRY_SECONDS: 2
+          CHUNK_OVERLAP: 50
 
   LambdaPermissionForS3:
     Type: AWS::Lambda::Permission

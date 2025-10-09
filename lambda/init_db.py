@@ -114,16 +114,14 @@ def lambda_handler(event, context):
             metadata JSONB DEFAULT '{}'::jsonb,
             status TEXT DEFAULT 'not-started',
             created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
+            updated_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT unique_doc_chunk UNIQUE (document_id, chunk_index)
         );
         """)
         conn.commit()
     
         # 4️⃣ Create Indexes
         cur.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_doc_chunk
-            ON document_chunks(document_id, chunk_index);
-    
         CREATE INDEX IF NOT EXISTS idx_document_chunks_textsearch
             ON document_chunks USING gin (to_tsvector('simple', chunk_text));
     
