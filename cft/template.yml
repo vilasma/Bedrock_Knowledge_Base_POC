@@ -434,7 +434,6 @@ Resources:
   BedrockKnowledgeBaseRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: kb-sync-data-KBRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -570,7 +569,7 @@ Resources:
               }
             ],
             "Principal": [
-              "arn:aws:iam::${AWS::AccountId}:role/kb-sync-data-KBRole"
+              "arn:aws:iam::${AWS::AccountId}:role/bedrock-s3-ingest-db-poc-BedrockKnowledgeBaseRole-*"
             ]
           }
         ]
