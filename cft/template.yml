@@ -482,13 +482,18 @@ Resources:
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
 
   # ---------------- OpenSearch Collection ----------------
-  OpenSearchCollection:
-    Type: AWS::OpenSearchServerless::Collection
-    DependsOn: OpenSearchEncryptionPolicy
+  OpenSearchCollectionIndex:
+    Type: AWS::OpenSearchServerless::Index
+    DependsOn:
+      - OpenSearchCollection
+      - OpenSearchDataAccessPolicy
     Properties:
       Name: kb-chunks
       Type: VECTORSEARCH
       Description: "OpenSearch Serverless collection for knowledge base indexing"
+      SecurityPolicyIds:
+        - !Ref OpenSearchEncryptionPolicy
+        - !Ref OpenSearchEncryptionNetworkPolicy
 
   OpenSearchCollectionIndex:
     Type: AWS::OpenSearchServerless::Index
