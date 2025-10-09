@@ -506,8 +506,6 @@ Resources:
       Name: kb-chunks
       Type: VECTORSEARCH
       Description: "OpenSearch Serverless collection for knowledge base indexing"
-      SecurityPolicyIds:
-        - !Ref OpenSearchEncryptionPolicy
 
   # ---------------- Network Security Policy ----------------
   OpenSearchNetworkPolicy:
