@@ -435,6 +435,7 @@ Resources:
   BedrockKnowledgeBaseRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: kb-sync-data-KBRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -484,35 +485,120 @@ Resources:
   # ---------------- OpenSearch Collection ----------------
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
+    DependsOn: OpenSearchEncryptionPolicy
     Properties:
       Name: kb-chunks
-      Type: SEARCH_COLLECTION
-      Description: "Collection to store document chunks for Bedrock KB"
+      Type: VECTORSEARCH
+      Description: "OpenSearch Serverless collection for knowledge base indexing"
 
-
-  # ---------------- OpenSearch Access Policy ----------------
-  OpenSearchAccessPolicy:
-    Type: AWS::OpenSearchServerless::AccessPolicy
+  OpenSearchCollectionIndex:
+    Type: AWS::OpenSearchServerless::Index
+    DependsOn: OpenSearchCollection
     Properties:
-      Name: lambda-access-policy
-      Type: COLLECTION
-      Resource: !Ref OpenSearchCollection
-      Policy: |
+      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
+      IndexName: kb-sync-data-index
+      Settings:
+        Index:
+          Knn: true
+          KnnAlgoParamEfSearch: 512
+      Mappings:
+        Properties:
+          vector:
+            Dimension: 1024
+            Index: true
+            Method:
+              Engine: faiss
+              Name: hnsw
+              Parameters:
+                EfConstruction: 512
+                M: 16
+              SpaceType: l2
+            Type: knn_vector
+          text:
+            Type: text
+          text-metadata:
+            Type: text
+
+  OpenSearchDataAccessPolicy:
+    Type: 'AWS::OpenSearchServerless::AccessPolicy'
+    Properties:
+      Name: kb-sync-data-policy
+      Type: data
+      Description: Access policy for the OpenSearch collection
+      Policy: !Sub |
+        [
+          {
+            "Description":"Access for kb-sync-user",
+            "Rules":[
+              {
+                "ResourceType":"index",
+                "Resource":[
+                "index/*/*"
+                ],
+                "Permission":[
+                "aoss:*"
+                ]
+              },
+              {
+                "ResourceType":"collection",
+                "Resource":[
+                "collection/kb-sync-data"
+                ],
+                "Permission":[
+                "aoss:*"
+                ]
+              }
+            ],
+            "Principal": [
+              "arn:aws:iam::${AWS::AccountId}:role/kb-sync-data-KBRole"
+            ]
+          }
+        ]
+
+  OpenSearchEncryptionPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: kb-sync-security
+      Type: encryption
+      Policy: !Sub |
         {
-          "Version": "2012-10-17",
-          "Statement": [
+          "Rules": [
             {
-              "Effect": "Allow",
-              "Principal": { "AWS": "*" },
-              "Action": ["aoss:IndexDocument","aoss:UpdateDocument","aoss:BulkIndex","aoss:Search"],
-              "Resource": "*"
+              "ResourceType": "collection",
+              "Resource": ["collection/kb-sync-data"]
             }
-          ]
+          ],
+          "AWSOwnedKey": true
         }
+
+  OpenSearchEncryptionNetworkPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: kb-sync-encrypt
+      Type: network
+      Policy: !Sub |
+        [
+          {
+            "Rules": [
+              {
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-sync-data"]
+              }
+            ],
+            "AllowFromPublic": true
+          }
+        ]
 
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
+    DependsOn:  
+      - OpenSearchCollection
+      - OpenSearchCollectionIndex
+      - OpenSearchDataAccessPolicy
+      - OpenSearchEncryptionPolicy
+      - OpenSearchEncryptionNetworkPolicy
+      - BedrockKnowledgeBaseRole
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base using OpenSearch vector backend"
@@ -526,19 +612,27 @@ Resources:
         OpenSearchConfiguration:
           CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
           IndexName: !Ref OpenSearchIndexName
+          FieldMapping:
+            PrimaryKeyField: document_id
+            VectorField: embedding_vector
+            TextField: chunk_text
+            MetadataField: metadata
 
   # ---------------- Bedrock Data Source ----------------
   KnowledgeBaseDataSource:
     Type: AWS::Bedrock::DataSource
+    DependsOn: 
+      - BedrockKnowledgeBase
     Properties:
       KnowledgeBaseId: !Ref BedrockKnowledgeBase
       Name: "OpenSearch-DataSource"
       Description: "OpenSearch collection for Bedrock ingestion"
       DataSourceConfiguration:
-        Type: OPENSEARCH
-        OpenSearchConfiguration:
-          CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
-          IndexName: !Ref OpenSearchIndexName
+        Type: S3
+        S3Configuration:
+          BucketArn: arn:aws:s3:::bedrock-ingest-bucket
+          InclusionPrefixes:
+            - "bedrock-poc-docs/"
 
 Outputs:
   RDSClusterEndpoint:
