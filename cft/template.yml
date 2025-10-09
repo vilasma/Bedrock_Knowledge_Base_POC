@@ -485,11 +485,10 @@ Resources:
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     Properties:
-      Name: !Ref OpenSearchIndexName
-      Type: COLLECTION
+      Name: kb-chunks
+      Type: SEARCH_COLLECTION
       Description: "Collection to store document chunks for Bedrock KB"
-      PartitionCount: 1
-      WarmCount: 1
+
 
   # ---------------- OpenSearch Access Policy ----------------
   OpenSearchAccessPolicy:
