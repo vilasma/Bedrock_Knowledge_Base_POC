@@ -582,7 +582,7 @@ Resources:
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/kb-sync-data"]
+                "Resource": ["collection/kb-chunks"]
               }
             ],
             "AllowFromPublic": true
