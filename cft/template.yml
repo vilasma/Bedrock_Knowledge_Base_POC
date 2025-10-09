@@ -482,86 +482,19 @@ Resources:
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
 
   # ---------------- OpenSearch Collection ----------------
+  # ---------------- OpenSearch Serverless Collection ----------------
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     Properties:
       Name: kb-chunks
       Type: VECTORSEARCH
       Description: "OpenSearch Serverless collection for knowledge base indexing"
-      SecurityPolicyIds:
-        - !Ref OpenSearchEncryptionPolicy
-        - !Ref OpenSearchEncryptionNetworkPolicy
 
-  OpenSearchCollectionIndex:
-    Type: AWS::OpenSearchServerless::Index
-    DependsOn:
-      - OpenSearchCollection
-      - OpenSearchDataAccessPolicy
-    Properties:
-      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
-      IndexName: kb-sync-data-index
-      Settings:
-        Index:
-          Knn: true
-          KnnAlgoParamEfSearch: 512
-      Mappings:
-        Properties:
-          vector:
-            Dimension: 1024
-            Index: true
-            Method:
-              Engine: faiss
-              Name: hnsw
-              Parameters:
-                EfConstruction: 512
-                M: 16
-              SpaceType: l2
-            Type: knn_vector
-          text:
-            Type: text
-          text-metadata:
-            Type: text
-
-  OpenSearchDataAccessPolicy:
-    Type: 'AWS::OpenSearchServerless::AccessPolicy'
-    Properties:
-      Name: kb-sync-data-policy
-      Type: data
-      Description: Access policy for the OpenSearch collection
-      Policy: !Sub |
-        [
-          {
-            "Description":"Access for kb-sync-user",
-            "Rules":[
-              {
-                "ResourceType":"index",
-                "Resource":[
-                "index/*/*"
-                ],
-                "Permission":[
-                "aoss:*"
-                ]
-              },
-              {
-                "ResourceType":"collection",
-                "Resource":[
-                "collection/kb-chunks"
-                ],
-                "Permission":[
-                "aoss:*"
-                ]
-              }
-            ],
-            "Principal": [
-              "arn:aws:iam::${AWS::AccountId}:role/kb-sync-data-KBRole"
-            ]
-          }
-        ]
-
+  # ---------------- Encryption Security Policy ----------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
-      Name: kb-sync-security
+      Name: kb-chunks-encryption
       Type: encryption
       Policy: !Sub |
         {
@@ -574,10 +507,11 @@ Resources:
           "AWSOwnedKey": true
         }
 
-  OpenSearchEncryptionNetworkPolicy:
+  # ---------------- Network Security Policy ----------------
+  OpenSearchNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
-      Name: kb-sync-encrypt
+      Name: kb-chunks-network
       Type: network
       Policy: !Sub |
         [
@@ -591,6 +525,64 @@ Resources:
             "AllowFromPublic": true
           }
         ]
+
+  # ---------------- Data Access Policy ----------------
+  OpenSearchDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: kb-chunks-access
+      Type: data
+      Description: Access policy for kb-sync-user
+      Policy: !Sub |
+        [
+          {
+            "Description":"Access for kb-sync-user",
+            "Rules":[
+              {
+                "ResourceType":"collection",
+                "Resource":["collection/kb-chunks"],
+                "Permission":["aoss:*"]
+              },
+              {
+                "ResourceType":"index",
+                "Resource":["index/*/*"],
+                "Permission":["aoss:*"]
+              }
+            ],
+            "Principal": [
+              "arn:aws:iam::${AWS::AccountId}:role/kb-sync-data-KBRole"
+            ]
+          }
+        ]
+
+  # ---------------- OpenSearch Index ----------------
+  OpenSearchCollectionIndex:
+    Type: AWS::OpenSearchServerless::Index
+    DependsOn: OpenSearchCollection
+    Properties:
+      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
+      IndexName: kb-sync-data-index
+      Settings:
+        Index:
+          Knn: true
+          KnnAlgoParamEfSearch: 512
+      Mappings:
+        Properties:
+          vector:
+            Type: knn_vector
+            Dimension: 1024
+            Index: true
+            Method:
+              Engine: faiss
+              Name: hnsw
+              Parameters:
+                EfConstruction: 512
+                M: 16
+              SpaceType: l2
+          text:
+            Type: text
+          text-metadata:
+            Type: text
 
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
