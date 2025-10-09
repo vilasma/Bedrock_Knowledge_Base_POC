@@ -495,21 +495,21 @@ Resources:
   OpenSearchAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
     Properties:
-      Name: LambdaAccessPolicy
+      Name: lambda-access-policy
       Type: COLLECTION
       Resource: !Ref OpenSearchCollection
-      Policy:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: "*"
-            Action:
-              - "aoss:IndexDocument"
-              - "aoss:UpdateDocument"
-              - "aoss:BulkIndex"
-              - "aoss:Search"
-            Resource: "*"
+      Policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "AWS": "*" },
+              "Action": ["aoss:IndexDocument","aoss:UpdateDocument","aoss:BulkIndex","aoss:Search"],
+              "Resource": "*"
+            }
+          ]
+        }
 
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
