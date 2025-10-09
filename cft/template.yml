@@ -569,7 +569,7 @@ Resources:
               }
             ],
             "Principal": [
-              "arn:aws:iam::${AWS::AccountId}:role/bedrock-s3-ingest-db-poc-BedrockKnowledgeBaseRole-*"
+              "arn:aws:iam::${AWS::AccountId}:role/bedrock-s3-ingest-db-poc-BedrockKnowledgeBaseRole-KR6ysZyKo9y6"
             ]
           }
         ]
