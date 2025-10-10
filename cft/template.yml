@@ -18,7 +18,7 @@ Parameters:
     Default: 20
   OpenSearchIndexName:
     Type: String
-    Default: kb_chunks
+    Default: kb-chunks
     Description: "OpenSearch index name for storing vector chunks"
 
 Resources:
@@ -500,6 +500,7 @@ Resources:
                   - aoss:APIAccessAll
                 Resource: !GetAtt OpenSearchCollection.Arn
               
+              # OpenSearch Security Policies
               - Effect: Allow
                 Action:
                   - aoss:CreateCollection
@@ -513,6 +514,7 @@ Resources:
                   - aoss:CreateSecurityPolicy
                 Resource: "*"
 
+
   # ---------------- Encryption Security Policy ----------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
@@ -524,7 +526,7 @@ Resources:
           "Rules": [
             {
               "ResourceType": "collection",
-              "Resource": ["collection/kb-chunks"]
+              "Resource": ["collection/${OpenSearchIndexName}"]
             }
           ],
           "AWSOwnedKey": true
@@ -535,7 +537,7 @@ Resources:
     Type: AWS::OpenSearchServerless::Collection
     DependsOn: OpenSearchEncryptionPolicy
     Properties:
-      Name: kb-chunks
+      Name: !Ref OpenSearchIndexName
       Type: VECTORSEARCH
       Description: "OpenSearch Serverless collection for knowledge base indexing"
 
@@ -551,7 +553,7 @@ Resources:
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"]
+                "Resource": ["collection/${OpenSearchIndexName}"]
               }
             ],
             "AllowFromPublic": true
