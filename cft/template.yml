@@ -329,20 +329,20 @@ Resources:
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
 
                # -------------------- OpenSearch Serverless --------------------
-            - Effect: Allow
-              Action:
-                - aoss:CreateCollection
-                - aoss:DescribeCollection
-                - aoss:UpdateCollection
-                - aoss:DeleteCollection
-                - aoss:BatchPutDocument
-                - aoss:BatchDeleteDocument
-                - aoss:VectorSearch
-                - aoss:ReadDocument
-                - aoss:ListCollections
-                - aoss:CreateIndex
-              Resource:
-                - !GetAtt OpenSearchCollection.Arn
+              - Effect: Allow
+                Action:
+                  - aoss:CreateCollection
+                  - aoss:DescribeCollection
+                  - aoss:UpdateCollection
+                  - aoss:DeleteCollection
+                  - aoss:BatchPutDocument
+                  - aoss:BatchDeleteDocument
+                  - aoss:VectorSearch
+                  - aoss:ReadDocument
+                  - aoss:ListCollections
+                  - aoss:CreateIndex
+                Resource:
+                  - !GetAtt OpenSearchCollection.Arn
 
               # EC2 Networking
               - Effect: Allow
