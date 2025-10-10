@@ -562,7 +562,7 @@ Resources:
     Properties:
       Name: kb-chunks-access
       Type: data
-      Description: "Allow Lambda role to access collection and index"
+      Description: Allow Lambda role to access collection and index
       Policy: !Sub |
         [
           {
@@ -571,12 +571,25 @@ Resources:
               {
                 "ResourceType": "collection",
                 "Resource": ["collection/kb-chunks"],
-                "Permission": ["aoss:BatchPutDocument","aoss:VectorSearch","aoss:ReadDocument","aoss:ListCollections","aoss:CreateIndex"]
+                "Permission": [
+                  "aoss:CreateCollectionItems",
+                  "aoss:DeleteCollectionItems",
+                  "aoss:UpdateCollectionItems",
+                  "aoss:DescribeCollectionItems",
+                  "aoss:*"
+                ]
               },
               {
                 "ResourceType": "index",
-                "Resource": ["index/kb-chunks/*"],
-                "Permission": ["aoss:*"]
+                "Resource": ["index/kb-sync-data-index/*"],
+                "Permission": [
+                  "aoss:ReadDocument",
+                  "aoss:WriteDocument",
+                  "aoss:CreateIndex",
+                  "aoss:UpdateIndex",
+                  "aoss:DeleteIndex",
+                  "aoss:*"
+                ]
               }
             ],
             "Principal": [
