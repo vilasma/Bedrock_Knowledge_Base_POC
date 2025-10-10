@@ -562,41 +562,29 @@ Resources:
     Properties:
       Name: kb-chunks-access
       Type: data
-      Description: Allow Lambda role to access collection and index
+      Description: Allow Lambda/Bedrock role to access collection and index
       Policy: !Sub |
-        [
-          {
-            "Description": "Access for Lambda ingestion",
-            "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"],
-                "Permission": [
-                  "aoss:CreateCollectionItems",
-                  "aoss:DeleteCollectionItems",
-                  "aoss:UpdateCollectionItems",
-                  "aoss:DescribeCollectionItems",
-                  "aoss:*"
-                ]
-              },
-              {
-                "ResourceType": "index",
-                "Resource": ["index/kb-sync-data-index/*"],
-                "Permission": [
-                  "aoss:ReadDocument",
-                  "aoss:WriteDocument",
-                  "aoss:CreateIndex",
-                  "aoss:UpdateIndex",
-                  "aoss:DeleteIndex",
-                  "aoss:*"
-                ]
-              }
-            ],
-            "Principal": [
-              "${LambdaExecutionRole.Arn}"
-            ]
-          }
-        ]
+        {
+          "Description": "Access for Lambda ingestion",
+          "Rules": [
+            {
+              "ResourceType": "collection",
+              "Resource": ["collection/kb-chunks"],
+              "Permission": [
+                "aoss:CreateIndex",
+                "aoss:ReadDocument",
+                "aoss:WriteDocument",
+                "aoss:VectorSearch",
+                "aoss:ListCollections",
+                "aoss:BatchPutDocument",
+                "aoss:BatchDeleteDocument"
+              ]
+            }
+          ],
+          "Principal": [
+            "${LambdaExecutionRole.Arn}"
+          ]
+        }
 
   # ------------------------
   # 5️⃣  OpenSearch Index
