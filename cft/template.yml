@@ -566,20 +566,25 @@ Resources:
       Policy: !Sub |
         {
           "Description": "Access for Lambda ingestion",
-          "Rules": [
-            {
-              "ResourceType": "collection",
-              "Resource": ["collection/kb-chunks"],
-              "Permission": [
-                "aoss:CreateIndex",
-                "aoss:ReadDocument",
-                "aoss:WriteDocument",
-                "aoss:VectorSearch",
-                "aoss:ListCollections",
-                "aoss:BatchPutDocument",
-                "aoss:BatchDeleteDocument"
-              ]
-            }
+          "Rules":[
+              {
+                "ResourceType":"index",
+                "Resource":[
+                "index/*/*"
+                ],
+                "Permission":[
+                "aoss:*"
+                ]
+              },
+              {
+                "ResourceType":"collection",
+                "Resource":[
+                "collection/kb-chunks"
+                ],
+                "Permission":[
+                "aoss:*"
+                ]
+              }
           ],
           "Principal": [
             "${LambdaExecutionRole.Arn}"
