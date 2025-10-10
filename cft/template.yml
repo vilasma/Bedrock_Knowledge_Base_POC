@@ -18,7 +18,7 @@ Parameters:
     Default: 20
   OpenSearchIndexName:
     Type: String
-    Default: kb-chunks
+    Default: kb-sync-data-index
     Description: "OpenSearch index name for storing vector chunks"
 
 Resources:
@@ -581,7 +581,8 @@ Resources:
             ],
             "Principal": [
               "${LambdaExecutionRole.Arn}",
-              "${BedrockKnowledgeBaseRole.Arn}"
+              "${BedrockKnowledgeBaseRole.Arn}",
+              "arn:aws:iam::${AWS::AccountId}:root"
             ]
           }
         ]
