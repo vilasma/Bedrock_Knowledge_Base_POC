@@ -499,6 +499,19 @@ Resources:
                 Action:
                   - aoss:APIAccessAll
                 Resource: !GetAtt OpenSearchCollection.Arn
+              
+                            - Effect: Allow
+                Action:
+                  - aoss:CreateCollection
+                  - aoss:CreateIndex
+                  - aoss:UpdateCollection
+                  - aoss:DeleteCollection
+                  - aoss:BatchGetCollection
+                  - aoss:ListCollections
+                  - aoss:GetSecurityPolicy
+                  - aoss:ListSecurityPolicies
+                  - aoss:CreateSecurityPolicy
+                Resource: "*"
 
   # ---------------- Encryption Security Policy ----------------
   OpenSearchEncryptionPolicy:
@@ -511,7 +524,7 @@ Resources:
           "Rules": [
             {
               "ResourceType": "collection",
-              "Resource": ["collection/kb-chunks"]
+              "Resource": ["collection/${OpenSearchIndexName}"]
             }
           ],
           "AWSOwnedKey": true
@@ -538,7 +551,7 @@ Resources:
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"]
+                "Resource": ["collection/${OpenSearchIndexName}"]
               }
             ],
             "AllowFromPublic": true
