@@ -604,22 +604,22 @@ Resources:
       Mappings:
         Properties:
           embedding_vector:
-            Type: Knn_vector
+            Type: knn_vector
             Dimension: 1536
             Index: true
             Method:
-              Engine: Faiss
-              Name: Hnsw
+              Engine: faiss
+              Name: hnsw
               Parameters:
                 EfConstruction: 512
                 M: 16
               SpaceType: l2
           chunk_text:
-            Type: Text
+            Type: text
           metadata:
-            Type: Text
+            Type: text
           document_id:
-            Type: Keyword
+            Type: text
   
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
