@@ -627,12 +627,13 @@ Resources:
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
-      - OpenSearchCollection
-      - OpenSearchCollectionIndex
-      - OpenSearchDataAccessPolicy
-      - OpenSearchEncryptionPolicy
-      - OpenSearchNetworkPolicy
-      - BedrockKnowledgeBaseRole
+      # - OpenSearchCollection
+      # - OpenSearchCollectionIndex
+      # - OpenSearchDataAccessPolicy
+      # - OpenSearchEncryptionPolicy
+      # - OpenSearchNetworkPolicy
+      #- BedrockKnowledgeBaseRole
+      - InvokeInitDB
     Properties:
       Name: poc-bedrock-kb
       Description: "Knowledge Base using OpenSearch vector backend"
@@ -642,10 +643,21 @@ Resources:
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
-        Type: "OPENSEARCH_SERVERLESS"
-        OpensearchServerlessConfiguration:
-          CollectionArn: !GetAtt OpenSearchCollection.Arn  
-          VectorIndexName: kb-sync-data-index
+        # Type: "OPENSEARCH_SERVERLESS"
+        # OpensearchServerlessConfiguration:
+        #   CollectionArn: !GetAtt OpenSearchCollection.Arn  
+        #   VectorIndexName: kb-sync-data-index
+        #   FieldMapping:
+        #     PrimaryKeyField: document_id
+        #     VectorField: embedding_vector
+        #     TextField: chunk_text
+        #     MetadataField: metadata
+        Type: RDS
+        RdsConfiguration:
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
+          DatabaseName: !Ref DBName
+          TableName: "document_chunks"
           FieldMapping:
             PrimaryKeyField: document_id
             VectorField: embedding_vector
