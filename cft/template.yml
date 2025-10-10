@@ -480,11 +480,33 @@ Resources:
                   - bedrock:InvokeModel
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
               
-              # OpenSearch Serverless Permissions
+  ### ------------------------
+  ### 1️⃣ Dedicated OpenSearch Serverless Role
+  ### ------------------------
+  OpenSearchServerlessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: opensearch-serverless-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - opensearchserverless.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonOpenSearchServerlessFullAccess
+      Policies:
+        - PolicyName: OpenSearchExtraPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
               - Effect: Allow
                 Action:
                   - aoss:CreateCollection
                   - aoss:DescribeCollection
+                  - aoss:CreateIndex
                   - aoss:UpdateCollection
                   - aoss:DeleteCollection
                   - aoss:BatchPutDocument
@@ -492,31 +514,12 @@ Resources:
                   - aoss:VectorSearch
                   - aoss:ReadDocument
                   - aoss:ListCollections
-                Resource: !GetAtt OpenSearchCollection.Arn
-
-              # OpenSearch API Access
-              - Effect: Allow
-                Action:
-                  - aoss:APIAccessAll
-                Resource: !GetAtt OpenSearchCollection.Arn
-              
-              # OpenSearch Security Policies
-              - Effect: Allow
-                Action:
-                  - aoss:CreateCollection
-                  - aoss:CreateIndex
-                  - aoss:UpdateCollection
-                  - aoss:DeleteCollection
-                  - aoss:BatchGetCollection
-                  - aoss:ListCollections
-                  - aoss:GetSecurityPolicy
-                  - aoss:ListSecurityPolicies
-                  - aoss:CreateSecurityPolicy
+                  - aoss:APIAccess
                 Resource: "*"
 
-  # ------------------------
-  # 1️⃣  Encryption Policy
-  # ------------------------
+  ### ------------------------
+  ### 2️⃣ OpenSearch Encryption Policy
+  ### ------------------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
@@ -533,9 +536,9 @@ Resources:
           "AWSOwnedKey": true
         }
 
-  # ------------------------
-  # 2️⃣  Network Policy
-  # ------------------------
+  ### ------------------------
+  ### 3️⃣ OpenSearch Network Policy
+  ### ------------------------
   OpenSearchNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
@@ -558,9 +561,9 @@ Resources:
           }
         ]
 
-  # ------------------------
-  # 3️⃣  OpenSearch Collection
-  # ------------------------
+  ### ------------------------
+  ### 4️⃣ OpenSearch Collection
+  ### ------------------------
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     DependsOn:
@@ -571,38 +574,9 @@ Resources:
       Type: VECTORSEARCH
       Description: "Serverless collection for knowledge base chunks"
 
-  # ------------------------
-  # 4️⃣  Data Access Policy
-  # ------------------------
-  OpenSearchDataAccessPolicy:
-    Type: AWS::OpenSearchServerless::AccessPolicy
-    Properties:
-      Name: kb-chunks-access
-      Type: data
-      Description: "Allow Bedrock KB Lambda role to access collection and index"
-      Policy: !Sub |
-        [
-          {
-            "Description": "Access for Bedrock Knowledge Base Lambda",
-            "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"],
-                "Permission": ["aoss:*"]
-              },
-              {
-                "ResourceType": "index",
-                "Resource": ["index/kb-chunks/*"],
-                "Permission": ["aoss:*"]
-              }
-            ],
-            "Principal": [
-              "${BedrockKnowledgeBaseRole.Arn}"
-            ]
-          }
-        ]
-
-  # ---------------- OpenSearch Index ----------------
+  ### ------------------------
+  ### 5️⃣ OpenSearch Index
+  ### ------------------------
   OpenSearchCollectionIndex:
     Type: AWS::OpenSearchServerless::Index
     DependsOn: OpenSearchCollection
@@ -630,6 +604,35 @@ Resources:
             Type: text
           text-metadata:
             Type: text
+
+  ### ------------------------
+  ### 6️⃣ OpenSearch Data Access Policy
+  ### ------------------------
+  OpenSearchDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: kb-chunks-access
+      Type: data
+      Description: "Allow OpenSearch role access for Bedrock ingestion"
+      Policy: !Sub |
+        [
+          {
+            "Description": "Access for OpenSearch operations",
+            "Rules": [
+              {
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-chunks"],
+                "Permission": ["aoss:*"]
+              },
+              {
+                "ResourceType": "index",
+                "Resource": ["index/kb-chunks/*"],
+                "Permission": ["aoss:*"]
+              }
+            ],
+            "Principal": ["${OpenSearchServerlessRole.Arn}"]
+          }
+        ]
 
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
