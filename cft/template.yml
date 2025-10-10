@@ -327,6 +327,23 @@ Resources:
                   - bedrock:CreateKnowledgeBase
                   - bedrock:StartKnowledgeBaseSync
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
+
+               # -------------------- OpenSearch Serverless --------------------
+            - Effect: Allow
+              Action:
+                - aoss:CreateCollection
+                - aoss:DescribeCollection
+                - aoss:UpdateCollection
+                - aoss:DeleteCollection
+                - aoss:BatchPutDocument
+                - aoss:BatchDeleteDocument
+                - aoss:VectorSearch
+                - aoss:ReadDocument
+                - aoss:ListCollections
+                - aoss:CreateIndex
+              Resource:
+                - !GetAtt OpenSearchCollection.Arn
+
               # EC2 Networking
               - Effect: Allow
                 Action:
@@ -480,46 +497,9 @@ Resources:
                   - bedrock:InvokeModel
                 Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1"
               
-  ### ------------------------
-  ### 1️⃣ Dedicated OpenSearch Serverless Role
-  ### ------------------------
-  OpenSearchServerlessRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: opensearch-serverless-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - opensearchserverless.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonOpenSearchServerlessFullAccess
-      Policies:
-        - PolicyName: OpenSearchExtraPermissions
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - aoss:CreateCollection
-                  - aoss:DescribeCollection
-                  - aoss:CreateIndex
-                  - aoss:UpdateCollection
-                  - aoss:DeleteCollection
-                  - aoss:BatchPutDocument
-                  - aoss:BatchDeleteDocument
-                  - aoss:VectorSearch
-                  - aoss:ReadDocument
-                  - aoss:ListCollections
-                  - aoss:APIAccess
-                Resource: "*"
-
-  ### ------------------------
-  ### 2️⃣ OpenSearch Encryption Policy
-  ### ------------------------
+  # ------------------------
+  # 1️⃣  Encryption Policy
+  # ------------------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
@@ -536,9 +516,9 @@ Resources:
           "AWSOwnedKey": true
         }
 
-  ### ------------------------
-  ### 3️⃣ OpenSearch Network Policy
-  ### ------------------------
+  # ------------------------
+  # 2️⃣  Network Policy
+  # ------------------------
   OpenSearchNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
@@ -561,9 +541,9 @@ Resources:
           }
         ]
 
-  ### ------------------------
-  ### 4️⃣ OpenSearch Collection
-  ### ------------------------
+  # ------------------------
+  # 3️⃣  OpenSearch Collection
+  # ------------------------
   OpenSearchCollection:
     Type: AWS::OpenSearchServerless::Collection
     DependsOn:
@@ -574,12 +554,44 @@ Resources:
       Type: VECTORSEARCH
       Description: "Serverless collection for knowledge base chunks"
 
-  ### ------------------------
-  ### 5️⃣ OpenSearch Index
-  ### ------------------------
+  # ------------------------
+  # 4️⃣  OpenSearch Data Access Policy
+  # ------------------------
+  OpenSearchDataAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: kb-chunks-access
+      Type: data
+      Description: "Allow Lambda role to access collection and index"
+      Policy: !Sub |
+        [
+          {
+            "Description": "Access for Lambda ingestion",
+            "Rules": [
+              {
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-chunks"],
+                "Permission": ["aoss:BatchPutDocument","aoss:VectorSearch","aoss:ReadDocument","aoss:ListCollections","aoss:CreateIndex"]
+              },
+              {
+                "ResourceType": "index",
+                "Resource": ["index/kb-chunks/*"],
+                "Permission": ["aoss:*"]
+              }
+            ],
+            "Principal": [
+              "${LambdaExecutionRole.Arn}"
+            ]
+          }
+        ]
+
+  # ------------------------
+  # 5️⃣  OpenSearch Index
+  # ------------------------
   OpenSearchCollectionIndex:
     Type: AWS::OpenSearchServerless::Index
-    DependsOn: OpenSearchCollection
+    DependsOn:
+      - OpenSearchCollection
     Properties:
       CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
       IndexName: kb-sync-data-index
@@ -604,36 +616,7 @@ Resources:
             Type: text
           text-metadata:
             Type: text
-
-  ### ------------------------
-  ### 6️⃣ OpenSearch Data Access Policy
-  ### ------------------------
-  OpenSearchDataAccessPolicy:
-    Type: AWS::OpenSearchServerless::AccessPolicy
-    Properties:
-      Name: kb-chunks-access
-      Type: data
-      Description: "Allow OpenSearch role access for Bedrock ingestion"
-      Policy: !Sub |
-        [
-          {
-            "Description": "Access for OpenSearch operations",
-            "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"],
-                "Permission": ["aoss:*"]
-              },
-              {
-                "ResourceType": "index",
-                "Resource": ["index/kb-chunks/*"],
-                "Permission": ["aoss:*"]
-              }
-            ],
-            "Principal": ["${OpenSearchServerlessRole.Arn}"]
-          }
-        ]
-
+  
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
