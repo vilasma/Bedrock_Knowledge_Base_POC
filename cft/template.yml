@@ -342,9 +342,8 @@ Resources:
                   - aoss:ReadDocument
                   - aoss:ListCollections
                   - aoss:CreateIndex
-                Resource:
-                  - !GetAtt OpenSearchCollection.Arn
-
+                Resource: "*"
+      
               # EC2 Networking
               - Effect: Allow
                 Action:
