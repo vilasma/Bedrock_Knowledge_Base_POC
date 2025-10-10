@@ -574,7 +574,7 @@ Resources:
   # ------------------------
   # 4️⃣  Data Access Policy
   # ------------------------
-  OpenSearchAccessPolicy:
+  OpenSearchDataAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
     Properties:
       Name: kb-chunks-access
