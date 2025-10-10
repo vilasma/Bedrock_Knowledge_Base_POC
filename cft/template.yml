@@ -500,7 +500,7 @@ Resources:
                   - aoss:APIAccessAll
                 Resource: !GetAtt OpenSearchCollection.Arn
               
-                            - Effect: Allow
+              - Effect: Allow
                 Action:
                   - aoss:CreateCollection
                   - aoss:CreateIndex
