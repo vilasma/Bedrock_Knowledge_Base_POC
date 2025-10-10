@@ -30,7 +30,7 @@ KNOWLEDGE_BASE_ID = os.environ['KB_ID']
 DATA_SOURCE_ID = os.environ['DATA_SOURCE_ID']
 
 OPENSEARCH_ENDPOINT = os.environ['OPENSEARCH_ENDPOINT']
-OPENSEARCH_INDEX = os.environ.get('OPENSEARCH_INDEX', 'kb-chunks')
+OPENSEARCH_INDEX = os.environ.get('OPENSEARCH_INDEX', 'kb-sync-data-indexs')
 
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 300))
 VECTOR_DIM = 1536

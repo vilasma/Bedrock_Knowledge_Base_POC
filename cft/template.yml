@@ -597,7 +597,7 @@ Resources:
       - BedrockKnowledgeBaseRole
       - InvokeInitDB
     Properties:
-      Name: poc-bedrock-kb
+      Name: poc-bedrock-kb-aoss
       Description: "Knowledge Base using OpenSearch vector backend"
       RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
