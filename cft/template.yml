@@ -524,7 +524,7 @@ Resources:
           "Rules": [
             {
               "ResourceType": "collection",
-              "Resource": ["collection/${OpenSearchIndexName}"]
+              "Resource": ["collection/kb-chunks"]
             }
           ],
           "AWSOwnedKey": true
@@ -551,7 +551,7 @@ Resources:
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/${OpenSearchIndexName}"]
+                "Resource": ["collection/kb-chunks"]
               }
             ],
             "AllowFromPublic": true
