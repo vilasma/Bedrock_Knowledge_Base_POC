@@ -566,28 +566,24 @@ Resources:
       Policy: !Sub |
         {
           "Description": "Access for Lambda ingestion",
-          "Rules":[
-              {
-                "ResourceType":"index",
-                "Resource":[
-                "index/*/*"
-                ],
-                "Permission":[
-                "aoss:*"
-                ]
-              },
-              {
-                "ResourceType":"collection",
-                "Resource":[
-                "collection/kb-chunks"
-                ],
-                "Permission":[
-                "aoss:*"
-                ]
-              }
+          "Rules": [
+            {
+              "ResourceType": "collection",
+              "Resource": ["collection/kb-chunks"],
+              "Permission": [
+                "aoss:CreateIndex",
+                "aoss:ReadDocument",
+                "aoss:WriteDocument",
+                "aoss:VectorSearch",
+                "aoss:ListCollections",
+                "aoss:BatchPutDocument",
+                "aoss:BatchDeleteDocument"
+              ]
+            }
           ],
           "Principal": [
-            "${LambdaExecutionRole.Arn}"
+            "${LambdaExecutionRole.Arn}",
+            "${BedrockKnowledgeBaseRole.Arn}"
           ]
         }
 
@@ -607,9 +603,9 @@ Resources:
           KnnAlgoParamEfSearch: 512
       Mappings:
         Properties:
-          vector:
+          embedding_vector:
             Type: knn_vector
-            Dimension: 1024
+            Dimension: 1536
             Index: true
             Method:
               Engine: faiss
@@ -618,21 +614,23 @@ Resources:
                 EfConstruction: 512
                 M: 16
               SpaceType: l2
-          text:
+          chunk_text:
             Type: text
-          text-metadata:
+          metadata:
             Type: text
+          document_id:
+            Type: keyword
   
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
-      # - OpenSearchCollection
-      # - OpenSearchCollectionIndex
-      # - OpenSearchDataAccessPolicy
-      # - OpenSearchEncryptionPolicy
-      # - OpenSearchNetworkPolicy
-      #- BedrockKnowledgeBaseRole
+      - OpenSearchCollection
+      - OpenSearchCollectionIndex
+      - OpenSearchDataAccessPolicy
+      - OpenSearchEncryptionPolicy
+      - OpenSearchNetworkPolicy
+      - BedrockKnowledgeBaseRole
       - InvokeInitDB
     Properties:
       Name: poc-bedrock-kb
@@ -643,26 +641,26 @@ Resources:
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
-        # Type: "OPENSEARCH_SERVERLESS"
-        # OpensearchServerlessConfiguration:
-        #   CollectionArn: !GetAtt OpenSearchCollection.Arn  
-        #   VectorIndexName: kb-sync-data-index
-        #   FieldMapping:
-        #     PrimaryKeyField: document_id
-        #     VectorField: embedding_vector
-        #     TextField: chunk_text
-        #     MetadataField: metadata
-        Type: RDS
-        RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn
-          CredentialsSecretArn: !Ref DBSecret
-          DatabaseName: !Ref DBName
-          TableName: "document_chunks"
+        Type: "OPENSEARCH_SERVERLESS"
+        OpensearchServerlessConfiguration:
+          CollectionArn: !GetAtt OpenSearchCollection.Arn  
+          VectorIndexName: kb-sync-data-index
           FieldMapping:
             PrimaryKeyField: document_id
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata
+        # Type: RDS
+        # RdsConfiguration:
+        #   ResourceArn: !GetAtt RDSCluster.DBClusterArn
+        #   CredentialsSecretArn: !Ref DBSecret
+        #   DatabaseName: !Ref DBName
+        #   TableName: "document_chunks"
+        #   FieldMapping:
+        #     PrimaryKeyField: document_id
+        #     VectorField: embedding_vector
+        #     TextField: chunk_text
+        #     MetadataField: metadata
       
   # ---------------- Bedrock Data Source ----------------
   KnowledgeBaseDataSource:
@@ -704,6 +702,10 @@ Outputs:
   OpenSearchCollectionEndpoint:
     Description: "OpenSearch Serverless Collection Endpoint"
     Value: !GetAtt OpenSearchCollection.CollectionEndpoint
+  
+  OpenSearchCollectionArn:
+    Description: ARN of the OpenSearch Serverless collection.
+    Value: !GetAtt OpenSearchCollection.Arn
 
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
