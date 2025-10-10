@@ -601,41 +601,41 @@ Resources:
   # ------------------------
   # 5️⃣  OpenSearch Index
   # ------------------------
-  OpenSearchCollectionIndex:
-    Type: AWS::OpenSearchServerless::Index
-    DependsOn:
-      - OpenSearchCollection
-    Properties:
-      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
-      IndexName: kb-sync-data-index
-      Settings:
-        Index:
-          Knn: true
-          KnnAlgoParamEfSearch: 512
-      Mappings:
-        Properties:
-          vector:
-            Type: knn_vector
-            Dimension: 1024
-            Index: true
-            Method:
-              Engine: faiss
-              Name: hnsw
-              Parameters:
-                EfConstruction: 512
-                M: 16
-              SpaceType: l2
-          text:
-            Type: text
-          text-metadata:
-            Type: text
+  # OpenSearchCollectionIndex:
+  #   Type: AWS::OpenSearchServerless::Index
+  #   DependsOn:
+  #     - OpenSearchCollection
+  #   Properties:
+  #     CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
+  #     IndexName: kb-sync-data-index
+  #     Settings:
+  #       Index:
+  #         Knn: true
+  #         KnnAlgoParamEfSearch: 512
+  #     Mappings:
+  #       Properties:
+  #         vector:
+  #           Type: knn_vector
+  #           Dimension: 1024
+  #           Index: true
+  #           Method:
+  #             Engine: faiss
+  #             Name: hnsw
+  #             Parameters:
+  #               EfConstruction: 512
+  #               M: 16
+  #             SpaceType: l2
+  #         text:
+  #           Type: text
+  #         text-metadata:
+  #           Type: text
   
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
       - OpenSearchCollection
-      - OpenSearchCollectionIndex
+      #- OpenSearchCollectionIndex
       - OpenSearchDataAccessPolicy
       - OpenSearchEncryptionPolicy
       - OpenSearchNetworkPolicy
