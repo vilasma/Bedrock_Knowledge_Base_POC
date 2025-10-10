@@ -514,34 +514,28 @@ Resources:
                   - aoss:CreateSecurityPolicy
                 Resource: "*"
 
-
-  # ---------------- Encryption Security Policy ----------------
+  # ------------------------
+  # 1️⃣  Encryption Policy
+  # ------------------------
   OpenSearchEncryptionPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
       Name: kb-chunks-encryption
       Type: encryption
-      Policy: |
+      Policy: !Sub |
         {
           "Rules": [
             {
               "ResourceType": "collection",
-              "Resource": ["collection/${OpenSearchIndexName}"]
+              "Resource": ["collection/kb-chunks"]
             }
           ],
           "AWSOwnedKey": true
         }
 
-  # ---------------- OpenSearch Serverless Collection ----------------
-  OpenSearchCollection:
-    Type: AWS::OpenSearchServerless::Collection
-    DependsOn: OpenSearchEncryptionPolicy
-    Properties:
-      Name: !Ref OpenSearchIndexName
-      Type: VECTORSEARCH
-      Description: "OpenSearch Serverless collection for knowledge base indexing"
-
-  # ---------------- Network Security Policy ----------------
+  # ------------------------
+  # 2️⃣  Network Policy
+  # ------------------------
   OpenSearchNetworkPolicy:
     Type: AWS::OpenSearchServerless::SecurityPolicy
     Properties:
@@ -553,38 +547,57 @@ Resources:
             "Rules": [
               {
                 "ResourceType": "collection",
-                "Resource": ["collection/${OpenSearchIndexName}"]
+                "Resource": ["collection/kb-chunks"]
+              },
+              {
+                "ResourceType": "dashboard",
+                "Resource": ["collection/kb-chunks"]
               }
             ],
             "AllowFromPublic": true
           }
         ]
 
-  # ---------------- Data Access Policy ----------------
-  OpenSearchDataAccessPolicy:
+  # ------------------------
+  # 3️⃣  OpenSearch Collection
+  # ------------------------
+  OpenSearchCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    DependsOn:
+      - OpenSearchEncryptionPolicy
+      - OpenSearchNetworkPolicy
+    Properties:
+      Name: kb-chunks
+      Type: VECTORSEARCH
+      Description: "Serverless collection for knowledge base chunks"
+
+  # ------------------------
+  # 4️⃣  Data Access Policy
+  # ------------------------
+  OpenSearchAccessPolicy:
     Type: AWS::OpenSearchServerless::AccessPolicy
     Properties:
       Name: kb-chunks-access
       Type: data
-      Description: Access policy for kb-sync-user
+      Description: "Allow Bedrock KB Lambda role to access collection and index"
       Policy: !Sub |
         [
           {
-            "Description":"Access for kb-sync-user",
-            "Rules":[
+            "Description": "Access for Bedrock Knowledge Base Lambda",
+            "Rules": [
               {
-                "ResourceType":"collection",
-                "Resource":["collection/kb-chunks"],
-                "Permission":["aoss:*"]
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-chunks"],
+                "Permission": ["aoss:*"]
               },
               {
-                "ResourceType":"index",
-                "Resource":["index/*/*"],
-                "Permission":["aoss:*"]
+                "ResourceType": "index",
+                "Resource": ["index/kb-chunks/*"],
+                "Permission": ["aoss:*"]
               }
             ],
             "Principal": [
-              "arn:aws:iam::${AWS::AccountId}:role/bedrock-s3-ingest-db-poc-BedrockKnowledgeBaseRole-KR6ysZyKo9y6"
+              "${BedrockKnowledgeBaseRole.Arn}"
             ]
           }
         ]
