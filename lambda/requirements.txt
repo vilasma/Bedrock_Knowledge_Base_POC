@@ -16,3 +16,4 @@ typing_extensions
 six
 urllib3
 opensearch-py
+cfnresponse

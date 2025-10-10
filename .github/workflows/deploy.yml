@@ -82,6 +82,7 @@ jobs:
           pushd package
           zip -r ../s3_handler.zip *
           zip -r ../init_db.zip *
+          zip -r ../index.zip *
           popd
 
       # ------------------ Upload Lambda artifacts ------------------
@@ -90,6 +91,7 @@ jobs:
           BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
           aws s3 cp s3_handler.zip s3://$BUCKET_NAME/lambda/s3_handler.zip --region $AWS_REGION
           aws s3 cp init_db.zip s3://$BUCKET_NAME/lambda/init_db.zip --region $AWS_REGION
+          aws s3 cp index.zip s3://$BUCKET_NAME/lambda/index.zip --region $AWS_REGION
 
       # ------------------ Deploy CloudFormation ------------------
       - name: Deploy CloudFormation

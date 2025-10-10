@@ -587,11 +587,44 @@ Resources:
           }
         ]
   
+  # Custom Resource Lambda to Create OpenSearch Index
+  CreateIndexLambda:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - OpenSearchCollection
+      - OpenSearchDataAccessPolicy
+    Properties:
+      FunctionName: poc-create-opensearch-index
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      Code:
+        S3Bucket: bedrock-ingest-bucket
+        S3Key: lambda/index.zip    
+      Environment:
+        Variables:
+          REGION: us-east-1
+      Layers:
+        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:63
+
+  InvokeCreateIndex:
+    Type: Custom::CreateOpenSearchIndex
+    DependsOn:
+      - CreateIndexLambda
+      - OpenSearchDataAccessPolicy
+    Properties:
+      ServiceToken: !GetAtt CreateIndexLambda.Arn
+      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
+      IndexName: kb-sync-data-index
+      Region: us-east-1
+
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
       - OpenSearchCollection
+      - InvokeCreateIndex  # Changed from OpenSearchCollectionIndexs
       - OpenSearchDataAccessPolicy
       - OpenSearchEncryptionPolicy
       - OpenSearchNetworkPolicy

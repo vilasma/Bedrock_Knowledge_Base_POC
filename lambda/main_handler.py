@@ -180,22 +180,14 @@ def fetch_chunks_from_aurora(doc_id):
 
 # ---------------- Index Chunks to OpenSearch ----------------
 def index_chunks_to_opensearch(chunks):
+    """
+    Index chunks to OpenSearch.
+    Note: Index must be created via CloudFormation custom resource before this runs.
+    """
+    # Verify index exists
     if not os_client.indices.exists(OPENSEARCH_INDEX):
-        # Create index with knn vector mapping
-        mapping = {
-            "settings": {"index": {"knn": True}},
-            "mappings": {
-                "properties": {
-                    "chunk_id": {"type": "keyword"},
-                    "document_id": {"type": "keyword"},
-                    "chunk_index": {"type": "integer"},
-                    "chunk_text": {"type": "text"},
-                    "embedding_vector": {"type": "knn_vector", "dimension": VECTOR_DIM},
-                    "metadata": {"type": "object"}
-                }
-            }
-        }
-        os_client.indices.create(index=OPENSEARCH_INDEX, body=mapping)
+        logger.error(f"Index {OPENSEARCH_INDEX} does not exist. It should be created by CloudFormation.")
+        raise Exception(f"OpenSearch index {OPENSEARCH_INDEX} not found")
 
     for chunk in chunks:
         doc = {
