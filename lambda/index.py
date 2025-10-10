@@ -1,17 +1,44 @@
 import json
 import boto3
-import cfnresponse
+import urllib3
+import traceback
 from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 import time
+
+http = urllib3.PoolManager()
+
+
+# ---------------- CFN Response ----------------
+def send_cfn_response(event, context, status, reason=None):
+    if "ResponseURL" not in event:
+        print(f"[CFN] Not CFN invocation. Status: {status}, Reason: {reason}")
+        return
+    body = {
+        "Status": status,
+        "Reason": reason or f"See CloudWatch Log Stream: {context.log_stream_name}",
+        "PhysicalResourceId": context.log_stream_name,
+        "StackId": event.get("StackId"),
+        "RequestId": event.get("RequestId"),
+        "LogicalResourceId": event.get("LogicalResourceId"),
+        "Data": {}
+    }
+    try:
+        http.request(
+            "PUT",
+            event["ResponseURL"],
+            body=json.dumps(body),
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(len(json.dumps(body)))
+            }
+        )
+    except Exception as e:
+        print(f"[ERROR] Failed CFN response: {e}")
 
 def lambda_handler(event, context):
     print(f"Event: {json.dumps(event)}")
 
     try:
-        if event['RequestType'] == 'Delete':
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
-            return
-
         collection_endpoint = event['ResourceProperties']['CollectionEndpoint']
         index_name = event['ResourceProperties']['IndexName']
         region = event['ResourceProperties']['Region']
@@ -36,8 +63,8 @@ def lambda_handler(event, context):
         # Check if index exists
         if os_client.indices.exists(index=index_name):
             print(f"Index {index_name} already exists")
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, {'IndexName': index_name})
-            return
+            send_cfn_response(event, context, "SUCCESS", {'IndexName': index_name})
+            return {"statusCode": 200, "body": json.dumps({"message": "Index already exists"})}
 
         # Create index with mapping
         mapping = {
@@ -75,10 +102,10 @@ def lambda_handler(event, context):
         # Wait a bit for propagation
         time.sleep(30)
 
-        cfnresponse.send(event, context, cfnresponse.SUCCESS, {'IndexName': index_name})
+        send_cfn_response(event, context, "SUCCESS", {'IndexName': index_name})
 
     except Exception as e:
         print(f"Error: {str(e)}")
-        import traceback
         traceback.print_exc()
-        cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+        send_cfn_response(event, context, "FAILED", {'IndexName': index_name})
+        return {"statusCode": 500, "body": {'IndexName': index_name}}
