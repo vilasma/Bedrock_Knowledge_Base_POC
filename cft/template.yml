@@ -579,6 +579,17 @@ Resources:
                 "aoss:BatchPutDocument",
                 "aoss:BatchDeleteDocument"
               ]
+            },
+            {
+                "ResourceType": "index",
+                "Resource": ["index/kb-chunks/*"],
+                "Permission": [
+                  "aoss:CreateIndex",
+                  "aoss:ReadDocument",
+                  "aoss:WriteDocument",
+                  "aoss:UpdateIndex",
+                  "aoss:DescribeIndex"
+                ]
             }
           ],
           "Principal": [
