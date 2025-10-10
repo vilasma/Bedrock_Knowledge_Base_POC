@@ -585,47 +585,12 @@ Resources:
             ]
           }
         ]
-
-  # ------------------------
-  # 5️⃣  OpenSearch Index
-  # ------------------------
-  OpenSearchCollectionIndex:
-    Type: AWS::OpenSearchServerless::Index
-    DependsOn:
-      - OpenSearchCollection
-    Properties:
-      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
-      IndexName: kb-sync-data-index
-      Settings:
-        Index:
-          Knn: true
-          KnnAlgoParamEfSearch: 512
-      Mappings:
-        Properties:
-          embedding_vector:
-            Type: knn_vector
-            Dimension: 1536
-            Index: true
-            Method:
-              Engine: faiss
-              Name: hnsw
-              Parameters:
-                EfConstruction: 512
-                M: 16
-              SpaceType: l2
-          chunk_text:
-            Type: text
-          metadata:
-            Type: text
-          document_id:
-            Type: text
   
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
       - OpenSearchCollection
-      - OpenSearchCollectionIndex
       - OpenSearchDataAccessPolicy
       - OpenSearchEncryptionPolicy
       - OpenSearchNetworkPolicy
@@ -649,17 +614,6 @@ Resources:
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata
-        # Type: RDS
-        # RdsConfiguration:
-        #   ResourceArn: !GetAtt RDSCluster.DBClusterArn
-        #   CredentialsSecretArn: !Ref DBSecret
-        #   DatabaseName: !Ref DBName
-        #   TableName: "document_chunks"
-        #   FieldMapping:
-        #     PrimaryKeyField: document_id
-        #     VectorField: embedding_vector
-        #     TextField: chunk_text
-        #     MetadataField: metadata
       
   # ---------------- Bedrock Data Source ----------------
   KnowledgeBaseDataSource:
