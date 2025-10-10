@@ -282,6 +282,7 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonRDSFullAccess
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonOpenSearchServiceFullAccess
       Policies:
         - PolicyName: BedrockS3RDSAccess
           PolicyDocument:
