@@ -15,4 +15,4 @@ pillow
 typing_extensions
 six
 urllib3
-opensearchpy
+opensearch-py
