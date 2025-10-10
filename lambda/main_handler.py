@@ -1,3 +1,19 @@
+"""
+Bedrock Knowledge Base POC - S3-based Ingestion Handler
+
+WORKFLOW OVERVIEW:
+1. Documents uploaded to S3 (bedrock-poc-docs/ prefix) trigger this Lambda
+2. Lambda extracts text, chunks it, and stores chunks in Aurora PostgreSQL for metadata tracking
+3. Bedrock Knowledge Base syncs directly from S3 bucket (no OpenSearch indexing needed)
+4. For queries, use retrieve_from_knowledge_base() which calls Bedrock KB Retrieve API
+
+CHANGES FROM OPENSEARCH-BASED APPROACH:
+- OpenSearch client initialization: COMMENTED OUT
+- index_chunks_to_opensearch() function: COMMENTED OUT
+- query_top_k_chunks() function: COMMENTED OUT (replaced with retrieve_from_knowledge_base())
+- Lambda handler no longer indexes to OpenSearch, relies on S3 sync to Knowledge Base
+"""
+
 import os
 import io
 import json
@@ -9,8 +25,8 @@ import boto3
 import psycopg2
 import pdfplumber
 import docx
-from opensearchpy import OpenSearch, RequestsHttpConnection
-from requests_aws4auth import AWS4Auth
+# from opensearchpy import OpenSearch, RequestsHttpConnection
+# from requests_aws4auth import AWS4Auth
 
 # ---------------- Logger ----------------
 logger = logging.getLogger(__name__)
@@ -29,8 +45,8 @@ DB_SECRET_ARN = os.environ['DB_SECRET_ARN']
 KNOWLEDGE_BASE_ID = os.environ['KB_ID']
 DATA_SOURCE_ID = os.environ['DATA_SOURCE_ID']
 
-OPENSEARCH_ENDPOINT = os.environ['OPENSEARCH_ENDPOINT']
-OPENSEARCH_INDEX = os.environ.get('OPENSEARCH_INDEX', 'kb-sync-data-index')
+# OPENSEARCH_ENDPOINT = os.environ['OPENSEARCH_ENDPOINT']
+# OPENSEARCH_INDEX = os.environ.get('OPENSEARCH_INDEX', 'kb-sync-data-index')
 
 CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 300))
 VECTOR_DIM = 1536
@@ -46,15 +62,15 @@ bedrock_agent = boto_session.client('bedrock-agent')
 bedrock_runtime = boto_session.client('bedrock-runtime')
 
 # ---------------- OpenSearch Client ----------------
-credentials = boto3.Session().get_credentials()
-awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, credentials.token, REGION, 'es')
-os_client = OpenSearch(
-    hosts=[{'host': OPENSEARCH_ENDPOINT, 'port': 443}],
-    http_auth=awsauth,
-    use_ssl=True,
-    verify_certs=True,
-    connection_class=RequestsHttpConnection
-)
+# credentials = boto3.Session().get_credentials()
+# awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, credentials.token, REGION, 'es')
+# os_client = OpenSearch(
+#     hosts=[{'host': OPENSEARCH_ENDPOINT, 'port': 443}],
+#     http_auth=awsauth,
+#     use_ssl=True,
+#     verify_certs=True,
+#     connection_class=RequestsHttpConnection
+# )
 
 # ---------------- DB Helpers ----------------
 def get_db_credentials(secret_arn):
@@ -179,26 +195,26 @@ def fetch_chunks_from_aurora(doc_id):
         conn.close()
 
 # ---------------- Index Chunks to OpenSearch ----------------
-def index_chunks_to_opensearch(chunks):
-    """
-    Index chunks to OpenSearch.
-    Note: Index must be created via CloudFormation custom resource before this runs.
-    """
-    # Verify index exists
-    if not os_client.indices.exists(OPENSEARCH_INDEX):
-        logger.error(f"Index {OPENSEARCH_INDEX} does not exist. It should be created by CloudFormation.")
-        raise Exception(f"OpenSearch index {OPENSEARCH_INDEX} not found")
+# def index_chunks_to_opensearch(chunks):
+#     """
+#     Index chunks to OpenSearch.
+#     Note: Index must be created via CloudFormation custom resource before this runs.
+#     """
+#     # Verify index exists
+#     if not os_client.indices.exists(OPENSEARCH_INDEX):
+#         logger.error(f"Index {OPENSEARCH_INDEX} does not exist. It should be created by CloudFormation.")
+#         raise Exception(f"OpenSearch index {OPENSEARCH_INDEX} not found")
 
-    for chunk in chunks:
-        doc = {
-            "chunk_id": chunk[0],
-            "document_id": chunk[1],
-            "chunk_index": chunk[2],
-            "chunk_text": chunk[3],
-            "embedding_vector": json.loads(chunk[4]),
-            "metadata": chunk[5]
-        }
-        os_client.index(index=OPENSEARCH_INDEX, id=chunk[0], body=doc)
+#     for chunk in chunks:
+#         doc = {
+#             "chunk_id": chunk[0],
+#             "document_id": chunk[1],
+#             "chunk_index": chunk[2],
+#             "chunk_text": chunk[3],
+#             "embedding_vector": json.loads(chunk[4]),
+#             "metadata": chunk[5]
+#         }
+#         os_client.index(index=OPENSEARCH_INDEX, id=chunk[0], body=doc)
 
 # ---------------- Bedrock KB Ingestion ----------------
 def trigger_bedrock_ingestion():
@@ -243,50 +259,84 @@ def update_document_status(doc_id, status):
     finally:
         conn.close()
 
-def query_top_k_chunks(query_text, k=TOP_K):
-    """
-    Computes embedding for the query text and returns top-k chunks from OpenSearch.
-    """
-    query_emb = get_chunk_embedding(query_text)
-    if not query_emb:
-        logger.warning("Failed to get query embedding")
-        return []
+# ---------------- OpenSearch Query (COMMENTED OUT - Using S3-based KB ingestion) ----------------
+# def query_top_k_chunks(query_text, k=TOP_K):
+#     """
+#     Computes embedding for the query text and returns top-k chunks from OpenSearch.
+#     """
+#     query_emb = get_chunk_embedding(query_text)
+#     if not query_emb:
+#         logger.warning("Failed to get query embedding")
+#         return []
 
-    # OpenSearch kNN query
-    query_body = {
-        "size": k,
-        "query": {
-            "knn": {
-                "embedding_vector": {
-                    "vector": query_emb,
-                    "k": k
+#     # OpenSearch kNN query
+#     query_body = {
+#         "size": k,
+#         "query": {
+#             "knn": {
+#                 "embedding_vector": {
+#                     "vector": query_emb,
+#                     "k": k
+#                 }
+#             }
+#         }
+#     }
+
+#     try:
+#         response = os_client.search(index=OPENSEARCH_INDEX, body=query_body)
+#         hits = response.get("hits", {}).get("hits", [])
+#         results = []
+#         for hit in hits:
+#             src = hit["_source"]
+#             results.append({
+#                 "chunk_id": src["chunk_id"],
+#                 "document_id": src["document_id"],
+#                 "chunk_index": src["chunk_index"],
+#                 "chunk_text": src["chunk_text"],
+#                 "score": hit["_score"]
+#             })
+#         return results
+#     except Exception as e:
+#         logger.exception(f"OpenSearch top-k query failed: {e}")
+#         return []
+
+# ---------------- Bedrock KB Retrieve API (for querying) ----------------
+def retrieve_from_knowledge_base(query_text, k=TOP_K):
+    """
+    Query the Bedrock Knowledge Base using the Retrieve API.
+    This replaces the OpenSearch query functionality.
+    """
+    try:
+        response = bedrock_agent.retrieve(
+            knowledgeBaseId=KNOWLEDGE_BASE_ID,
+            retrievalQuery={
+                'text': query_text
+            },
+            retrievalConfiguration={
+                'vectorSearchConfiguration': {
+                    'numberOfResults': k
                 }
             }
-        }
-    }
+        )
 
-    try:
-        response = os_client.search(index=OPENSEARCH_INDEX, body=query_body)
-        hits = response.get("hits", {}).get("hits", [])
         results = []
-        for hit in hits:
-            src = hit["_source"]
+        for item in response.get('retrievalResults', []):
             results.append({
-                "chunk_id": src["chunk_id"],
-                "document_id": src["document_id"],
-                "chunk_index": src["chunk_index"],
-                "chunk_text": src["chunk_text"],
-                "score": hit["_score"]
+                'content': item.get('content', {}).get('text', ''),
+                'score': item.get('score', 0.0),
+                'location': item.get('location', {}),
+                'metadata': item.get('metadata', {})
             })
+
         return results
     except Exception as e:
-        logger.exception(f"OpenSearch top-k query failed: {e}")
+        logger.exception(f"Bedrock KB retrieve failed: {e}")
         return []
 
 # ---------------- Lambda Handler ----------------
 def lambda_handler(event, context):
     results = []
-    queries = event.get("queries", [])
+    # queries = event.get("queries", [])  # Commented out - use retrieve_from_knowledge_base() for queries
 
     for record in event.get("Records", []):
         s3_key = record["s3"]["object"]["key"]
@@ -298,26 +348,34 @@ def lambda_handler(event, context):
                 results.append({"file": s3_key, "status": "empty"})
                 continue
 
-            # Insert chunks in Aurora and OpenSearch
+            # Insert chunks in Aurora (storing for metadata tracking)
             chunks = split_into_chunks(text)
             doc_id = insert_document_and_chunks(s3_key, chunks)
-            aurora_chunks = fetch_chunks_from_aurora(doc_id)
-            index_chunks_to_opensearch(aurora_chunks)
 
-            # Trigger Bedrock ingestion
+            # ---------------- S3-based Knowledge Base Ingestion ----------------
+            # The document is already in S3 (bedrock-poc-docs/ prefix)
+            # Bedrock Knowledge Base will sync directly from S3 bucket
+            # No need to index to OpenSearch - commenting out the OpenSearch step
+            # aurora_chunks = fetch_chunks_from_aurora(doc_id)
+            # index_chunks_to_opensearch(aurora_chunks)
+
+            logger.info(f"Document {s3_key} processed. Aurora doc_id={doc_id}. Ready for KB sync from S3.")
+
+            # Trigger Bedrock ingestion from S3
             job_id = trigger_bedrock_ingestion()
             job_status, failure_reason = wait_for_bedrock_job(job_id) if job_id else ("FAILED", "No Job ID returned")
 
             # Update document & chunk status in Aurora
             update_document_status(doc_id, job_status)
 
-            # Process top-k queries if provided
-            top_k_results = {}
-            for query in queries:
-                query_text = query.get("text")
-                query_id = query.get("query_id", str(uuid.uuid4()))
-                if query_text:
-                    top_k_results[query_id] = query_top_k_chunks(query_text, k=TOP_K)
+            # ---------------- Query Processing (COMMENTED OUT - Using Bedrock KB Retrieve API) ----------------
+            # For querying, use Bedrock Knowledge Base Retrieve API instead of OpenSearch
+            # top_k_results = {}
+            # for query in queries:
+            #     query_text = query.get("text")
+            #     query_id = query.get("query_id", str(uuid.uuid4()))
+            #     if query_text:
+            #         top_k_results[query_id] = query_top_k_chunks(query_text, k=TOP_K)
 
             results.append({
                 "file": s3_key,
@@ -325,7 +383,8 @@ def lambda_handler(event, context):
                 "last_ingestion_job_id": job_id,
                 "status": job_status,
                 "failure_reason": failure_reason,
-                "top_k_results": top_k_results
+                "message": "Document synced to S3 for Knowledge Base ingestion"
+                # "top_k_results": top_k_results  # Commented out - use Bedrock KB Retrieve API
             })
         except Exception as e:
             logger.exception(f"Failed processing {s3_key}")

@@ -16,10 +16,10 @@ Parameters:
   DBAllocatedStorage:
     Type: Number
     Default: 20
-  OpenSearchIndexName:
-    Type: String
-    Default: kb-sync-data-index
-    Description: "OpenSearch index name for storing vector chunks"
+  # OpenSearchIndexName:
+  #   Type: String
+  #   Default: kb-sync-data-index
+  #   Description: "OpenSearch index name for storing vector chunks"
 
 Resources:
   ### VPC & Subnets
@@ -327,6 +327,8 @@ Resources:
                   - bedrock:ListIngestionJobs
                   - bedrock:CreateKnowledgeBase
                   - bedrock:StartKnowledgeBaseSync
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
                 Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*
 
                # -------------------- OpenSearch Serverless --------------------
@@ -429,8 +431,8 @@ Resources:
           KB_ID: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
           DATA_SOURCE_ID: !GetAtt KnowledgeBaseDataSource.DataSourceId
           # OpenSearch
-          OPENSEARCH_ENDPOINT: !GetAtt OpenSearchCollection.CollectionEndpoint
-          OPENSEARCH_INDEX: !Ref OpenSearchIndexName
+          # OPENSEARCH_ENDPOINT: !GetAtt OpenSearchCollection.CollectionEndpoint
+          # OPENSEARCH_INDEX: !Ref OpenSearchIndexName
           # Processing
           CHUNK_SIZE: 300
           VECTOR_DIM: 1536
@@ -500,138 +502,138 @@ Resources:
   # ------------------------
   # 1️⃣  Encryption Policy
   # ------------------------
-  OpenSearchEncryptionPolicy:
-    Type: AWS::OpenSearchServerless::SecurityPolicy
-    Properties:
-      Name: kb-chunks-encryption
-      Type: encryption
-      Policy: !Sub |
-        {
-          "Rules": [
-            {
-              "ResourceType": "collection",
-              "Resource": ["collection/kb-chunks"]
-            }
-          ],
-          "AWSOwnedKey": true
-        }
+  # OpenSearchEncryptionPolicy:
+  #   Type: AWS::OpenSearchServerless::SecurityPolicy
+  #   Properties:
+  #     Name: kb-chunks-encryption
+  #     Type: encryption
+  #     Policy: !Sub |
+  #       {
+  #         "Rules": [
+  #           {
+  #             "ResourceType": "collection",
+  #             "Resource": ["collection/kb-chunks"]
+  #           }
+  #         ],
+  #         "AWSOwnedKey": true
+  #       }
 
-  # ------------------------
-  # 2️⃣  Network Policy
-  # ------------------------
-  OpenSearchNetworkPolicy:
-    Type: AWS::OpenSearchServerless::SecurityPolicy
-    Properties:
-      Name: kb-chunks-network
-      Type: network
-      Policy: !Sub |
-        [
-          {
-            "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"]
-              },
-              {
-                "ResourceType": "dashboard",
-                "Resource": ["collection/kb-chunks"]
-              }
-            ],
-            "AllowFromPublic": true
-          }
-        ]
+  # # ------------------------
+  # # 2️⃣  Network Policy
+  # # ------------------------
+  # OpenSearchNetworkPolicy:
+  #   Type: AWS::OpenSearchServerless::SecurityPolicy
+  #   Properties:
+  #     Name: kb-chunks-network
+  #     Type: network
+  #     Policy: !Sub |
+  #       [
+  #         {
+  #           "Rules": [
+  #             {
+  #               "ResourceType": "collection",
+  #               "Resource": ["collection/kb-chunks"]
+  #             },
+  #             {
+  #               "ResourceType": "dashboard",
+  #               "Resource": ["collection/kb-chunks"]
+  #             }
+  #           ],
+  #           "AllowFromPublic": true
+  #         }
+  #       ]
 
-  # ------------------------
-  # 3️⃣  OpenSearch Collection
-  # ------------------------
-  OpenSearchCollection:
-    Type: AWS::OpenSearchServerless::Collection
-    DependsOn:
-      - OpenSearchEncryptionPolicy
-      - OpenSearchNetworkPolicy
-    Properties:
-      Name: kb-chunks
-      Type: VECTORSEARCH
-      Description: "Serverless collection for knowledge base chunks"
+  # # ------------------------
+  # # 3️⃣  OpenSearch Collection
+  # # ------------------------
+  # OpenSearchCollection:
+  #   Type: AWS::OpenSearchServerless::Collection
+  #   DependsOn:
+  #     - OpenSearchEncryptionPolicy
+  #     - OpenSearchNetworkPolicy
+  #   Properties:
+  #     Name: kb-chunks
+  #     Type: VECTORSEARCH
+  #     Description: "Serverless collection for knowledge base chunks"
 
-  # ------------------------
-  # 4️⃣  OpenSearch Data Access Policy
-  # ------------------------
-  OpenSearchDataAccessPolicy:
-    Type: AWS::OpenSearchServerless::AccessPolicy
-    Properties:
-      Name: kb-chunks-access
-      Type: data
-      Description: Allow Lambda/Bedrock role to access collection and index
-      Policy: !Sub |
-        [
-          {
-            "Rules": [
-              {
-                "ResourceType": "index",
-                "Resource": ["index/kb-chunks/*"],
-                "Permission": [
-                  "aoss:CreateIndex",
-                  "aoss:ReadDocument",
-                  "aoss:WriteDocument",
-                  "aoss:UpdateIndex",
-                  "aoss:DescribeIndex"
-                ]
-              }
-            ],
-            "Principal": [
-              "${LambdaExecutionRole.Arn}",
-              "${BedrockKnowledgeBaseRole.Arn}",
-              "arn:aws:iam::${AWS::AccountId}:root"
-            ]
-          }
-        ]
+  # # ------------------------
+  # # 4️⃣  OpenSearch Data Access Policy
+  # # ------------------------
+  # OpenSearchDataAccessPolicy:
+  #   Type: AWS::OpenSearchServerless::AccessPolicy
+  #   Properties:
+  #     Name: kb-chunks-access
+  #     Type: data
+  #     Description: Allow Lambda/Bedrock role to access collection and index
+  #     Policy: !Sub |
+  #       [
+  #         {
+  #           "Rules": [
+  #             {
+  #               "ResourceType": "index",
+  #               "Resource": ["index/kb-chunks/*"],
+  #               "Permission": [
+  #                 "aoss:CreateIndex",
+  #                 "aoss:ReadDocument",
+  #                 "aoss:WriteDocument",
+  #                 "aoss:UpdateIndex",
+  #                 "aoss:DescribeIndex"
+  #               ]
+  #             }
+  #           ],
+  #           "Principal": [
+  #             "${LambdaExecutionRole.Arn}",
+  #             "${BedrockKnowledgeBaseRole.Arn}",
+  #             "arn:aws:iam::${AWS::AccountId}:root"
+  #           ]
+  #         }
+  #       ]
   
-  # Custom Resource Lambda to Create OpenSearch Index
-  CreateIndexLambda:
-    Type: AWS::Lambda::Function
-    DependsOn:
-      - OpenSearchCollection
-      - OpenSearchDataAccessPolicy
-    Properties:
-      FunctionName: poc-create-opensearch-index
-      Runtime: python3.11
-      Handler: index.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
-      Code:
-        S3Bucket: bedrock-ingest-bucket
-        S3Key: lambda/index.zip    
-      Environment:
-        Variables:
-          REGION: us-east-1
-      Layers:
-        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:63
+  # # Custom Resource Lambda to Create OpenSearch Index
+  # CreateIndexLambda:
+  #   Type: AWS::Lambda::Function
+  #   DependsOn:
+  #     - OpenSearchCollection
+  #     - OpenSearchDataAccessPolicy
+  #   Properties:
+  #     FunctionName: poc-create-opensearch-index
+  #     Runtime: python3.11
+  #     Handler: index.lambda_handler
+  #     Role: !GetAtt LambdaExecutionRole.Arn
+  #     Timeout: 300
+  #     Code:
+  #       S3Bucket: bedrock-ingest-bucket
+  #       S3Key: lambda/index.zip    
+  #     Environment:
+  #       Variables:
+  #         REGION: us-east-1
+  #     Layers:
+  #       - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:63
 
-  InvokeCreateIndex:
-    Type: Custom::CreateOpenSearchIndex
-    DependsOn:
-      - CreateIndexLambda
-      - OpenSearchDataAccessPolicy
-    Properties:
-      ServiceToken: !GetAtt CreateIndexLambda.Arn
-      CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
-      IndexName: kb-sync-data-index
-      Region: us-east-1
+  # InvokeCreateIndex:
+  #   Type: Custom::CreateOpenSearchIndex
+  #   DependsOn:
+  #     - CreateIndexLambda
+  #     - OpenSearchDataAccessPolicy
+  #   Properties:
+  #     ServiceToken: !GetAtt CreateIndexLambda.Arn
+  #     CollectionEndpoint: !GetAtt OpenSearchCollection.CollectionEndpoint
+  #     IndexName: kb-sync-data-index
+  #     Region: us-east-1
 
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
     DependsOn:  
-      - OpenSearchCollection
-      - InvokeCreateIndex  # Changed from OpenSearchCollectionIndexs
-      - OpenSearchDataAccessPolicy
-      - OpenSearchEncryptionPolicy
-      - OpenSearchNetworkPolicy
-      - BedrockKnowledgeBaseRole
+      # - OpenSearchCollection
+      # - InvokeCreateIndex  # Changed from OpenSearchCollectionIndexs
+      # - OpenSearchDataAccessPolicy
+      # - OpenSearchEncryptionPolicy
+      # - OpenSearchNetworkPolicy
+      #- BedrockKnowledgeBaseRole
       - InvokeInitDB
     Properties:
-      Name: poc-bedrock-kb-aoss
+      Name: poc-bedrock-kb
       Description: "Knowledge Base using OpenSearch vector backend"
       RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
@@ -639,11 +641,22 @@ Resources:
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
-        Type: "OPENSEARCH_SERVERLESS"
-        OpensearchServerlessConfiguration:
-          CollectionArn: !GetAtt OpenSearchCollection.Arn  
-          VectorIndexName: kb-sync-data-index
+        # Type: "OPENSEARCH_SERVERLESS"
+        # OpensearchServerlessConfiguration:
+        #   CollectionArn: !GetAtt OpenSearchCollection.Arn  
+        #   VectorIndexName: kb-sync-data-index
+        #   FieldMapping:
+        #     VectorField: embedding_vector
+        #     TextField: chunk_text
+        #     MetadataField: metadata
+        Type: RDS
+        RdsConfiguration:
+          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          CredentialsSecretArn: !Ref DBSecret
+          DatabaseName: !Ref DBName
+          TableName: "document_chunks"
           FieldMapping:
+            PrimaryKeyField: document_id
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata
@@ -685,13 +698,13 @@ Outputs:
     Description: Lambda function for ingestion
     Value: !Ref S3HandlerLambda
   
-  OpenSearchCollectionEndpoint:
-    Description: "OpenSearch Serverless Collection Endpoint"
-    Value: !GetAtt OpenSearchCollection.CollectionEndpoint
+  # OpenSearchCollectionEndpoint:
+  #   Description: "OpenSearch Serverless Collection Endpoint"
+  #   Value: !GetAtt OpenSearchCollection.CollectionEndpoint
   
-  OpenSearchCollectionArn:
-    Description: ARN of the OpenSearch Serverless collection.
-    Value: !GetAtt OpenSearchCollection.Arn
+  # OpenSearchCollectionArn:
+  #   Description: ARN of the OpenSearch Serverless collection.
+  #   Value: !GetAtt OpenSearchCollection.Arn
 
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
