@@ -566,21 +566,7 @@ Resources:
       Policy: !Sub |
         [
           {
-            "Description": "Access for Lambda and Bedrock ingestion",
             "Rules": [
-              {
-                "ResourceType": "collection",
-                "Resource": ["collection/kb-chunks"],
-                "Permission": [
-                  "aoss:CreateIndex",
-                  "aoss:ReadDocument",
-                  "aoss:WriteDocument",
-                  "aoss:VectorSearch",
-                  "aoss:ListCollections",
-                  "aoss:BatchPutDocument",
-                  "aoss:BatchDeleteDocument"
-                ]
-              },
               {
                 "ResourceType": "index",
                 "Resource": ["index/kb-chunks/*"],
