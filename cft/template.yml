@@ -658,8 +658,6 @@ Resources:
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata
-          AccessPolicyArns:
-            - !GetAtt OpenSearchDataAccessPolicy.Arn
 
   # ---------------- Bedrock Data Source ----------------
   KnowledgeBaseDataSource:
