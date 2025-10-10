@@ -610,7 +610,6 @@ Resources:
           CollectionArn: !GetAtt OpenSearchCollection.Arn  
           VectorIndexName: kb-sync-data-index
           FieldMapping:
-            PrimaryKeyField: document_id
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata

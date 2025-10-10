@@ -1,30 +1,52 @@
-# S3 -> Bedrock -> PostgreSQL PoC
+# AWS Bedrock Knowledge Base PoC
 
-This Proof of Concept (PoC) demonstrates a pipeline that processes documents uploaded to an S3 bucket, generates embeddings using AWS Bedrock, and stores the embeddings along with metadata in a PostgreSQL database (RDS).
+This Proof of Concept (PoC) demonstrates a complete RAG (Retrieval-Augmented Generation) pipeline that processes documents uploaded to S3, generates embeddings using AWS Bedrock, stores them in both Aurora PostgreSQL (with pgvector) and OpenSearch Serverless, and enables semantic search capabilities through AWS Bedrock Knowledge Base.
+
+---
+
+## Architecture Overview
+
+This PoC implements a multi-tiered storage and retrieval system:
+
+1. **Document Ingestion**: S3 → Lambda → Text Extraction → Chunking
+2. **Embedding Generation**: AWS Bedrock Titan Embeddings (1536 dimensions)
+3. **Dual Storage Strategy**:
+   - **Aurora PostgreSQL**: Relational storage with pgvector for structured queries
+   - **OpenSearch Serverless**: Vector search optimized for similarity queries
+4. **Bedrock Knowledge Base**: Managed ingestion and retrieval interface
+5. **Semantic Search**: Top-K retrieval using vector similarity
 
 ---
 
 ## How It Works
 
-1. **Document Upload**:
-   - Upload a document (e.g., `.txt`, `.pdf`, `.html`) to the S3 bucket created by the CloudFormation stack.
-   - The S3 bucket triggers the `IngestLambdaFunction`.
+### 1. Document Upload and Processing
+- Documents (`.txt`, `.pdf`, `.docx`) are uploaded to S3 bucket under `bedrock-poc-docs/` prefix
+- S3 event notification triggers the main Lambda handler ([main_handler.py](lambda/main_handler.py))
+- Lambda extracts text and splits into configurable chunks (default: 300 words)
 
-2. **Text Extraction and Chunking**:
-   - The Lambda function downloads the document from S3.
-   - Extracts text from the document (supports `.txt`, `.pdf`, `.html`).
-   - Splits the text into overlapping chunks for processing.
+### 2. Multi-Tier Storage Pipeline
+- **Aurora PostgreSQL**: Stores documents, metadata, and chunks with embeddings
+  - `documents` table: Document metadata and processing status
+  - `metadata` table: Multi-tenant metadata (tenant_id, user_id, project_id, thread_id)
+  - `document_chunks` table: Text chunks with 1536-dimensional embeddings and deduplication
+- **OpenSearch Serverless**: Indexes chunks for fast KNN vector search
+- **Bedrock Knowledge Base**: Syncs data from S3 for managed ingestion
 
-3. **Embedding Generation**:
-   - Each chunk is sent to AWS Bedrock to generate embeddings using the specified model (e.g., `amazon.titan-embed-text-v1`).
-   - Metadata (e.g., `Tenant_Id`, `User_Id`, `Document_Id`, etc.) is included with each chunk.
+### 3. Embedding Generation
+- Each text chunk is sent to AWS Bedrock using `amazon.titan-embed-text-v1` model
+- Generates 1536-dimensional embeddings
+- Retry logic with exponential backoff for resilience
 
-4. **Storage in PostgreSQL**:
-   - The embeddings and metadata are stored in a PostgreSQL database (RDS) using the `document_chunks` table.
+### 4. Bedrock Knowledge Base Ingestion
+- Automatically triggers ingestion job after document processing
+- Polls job status until completion (configurable timeout)
+- Updates document and chunk status in Aurora based on ingestion results
 
-5. **Knowledge Base Handler**:
-   - A separate Lambda function (`KnowledgeBaseHandlerFunction`) is available for custom embedding and chunking strategies.
-   - This function can be invoked for advanced use cases.
+### 5. Semantic Search
+- Query text is embedded using the same Titan model
+- OpenSearch performs KNN search to retrieve top-K most similar chunks
+- Returns ranked results with similarity scores
 
 ---
 
