@@ -1,20 +1,110 @@
 # AWS Bedrock Knowledge Base PoC
 
-This Proof of Concept (PoC) demonstrates a complete RAG (Retrieval-Augmented Generation) pipeline that processes documents uploaded to S3, generates embeddings using AWS Bedrock, stores them in both Aurora PostgreSQL (with pgvector) and OpenSearch Serverless, and enables semantic search capabilities through AWS Bedrock Knowledge Base.
+**Complete RAG pipeline with document chunking, embedding generation, vector storage, and intelligent querying.**
+
+This POC demonstrates an end-to-end document ingestion and retrieval system that:
+- ✅ Uploads documents to S3 with automatic processing
+- ✅ Chunks documents and generates embeddings via Bedrock Titan
+- ✅ Stores everything in Aurora PostgreSQL with pgvector
+- ✅ Enables semantic search through Bedrock Knowledge Base
+- ✅ Provides real-time monitoring with step-by-step buffering
+- ✅ Filters retrieval by metadata (tenant_id, user_id, document_ids)
+- ✅ Generates intelligent answers using OpenAI with retrieved context
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# 1. Deploy AWS infrastructure (see DEPLOYMENT_GUIDE.md)
+aws cloudformation create-stack --stack-name bedrock-kb-poc \
+    --template-body file://cft/template.yml \
+    --capabilities CAPABILITY_IAM
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your AWS credentials and endpoints
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Run the application
+python app.py
+
+# 5. Access UI at http://localhost:7860
+```
+
+📖 **[Complete Deployment Guide →](DEPLOYMENT_GUIDE.md)**
 
 ---
 
 ## Architecture Overview
 
-This PoC implements a multi-tiered storage and retrieval system:
+```
+┌──────────────┐      ┌─────────────┐      ┌──────────────────┐
+│   Gradio UI  │ ───> │  S3 Bucket  │ ───> │ Lambda Function  │
+│   (app.py)   │      │   (docs)    │      │ (main_handler)   │
+└──────────────┘      └─────────────┘      └──────────────────┘
+       │                                            │
+       │                                            ↓
+       │                                   ┌─────────────────┐
+       │                                   │ Text Extraction │
+       │                                   │    Chunking     │
+       │                                   │   Embeddings    │
+       │                                   └─────────────────┘
+       │                                            │
+       │                                            ↓
+       ↓                                   ┌─────────────────┐
+┌──────────────────────────────────────────────────────────────┐
+│              Aurora PostgreSQL (pgvector)                     │
+│  ┌──────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │  documents   │  │ document_chunks │  │ bedrock_kb_docs │ │
+│  │  (tracking)  │  │ (our storage)   │  │ (Bedrock mgmt)  │ │
+│  └──────────────┘  └─────────────────┘  └─────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+       │                                            ↑
+       │                                            │
+       ↓                                   ┌─────────────────┐
+┌──────────────┐                          │ Bedrock KB Sync │
+│  Query UI    │ ──────────────────────> └─────────────────┘
+│ (filters)    │                                   │
+└──────────────┘                                   ↓
+       │                                   ┌─────────────────┐
+       │                                   │ Vector Search   │
+       │                                   │ (with filters)  │
+       │                                   └─────────────────┘
+       │                                            │
+       ↓                                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                      OpenAI GPT-4                             │
+│              (Answer Generation from Context)                 │
+└──────────────────────────────────────────────────────────────┘
+```
 
-1. **Document Ingestion**: S3 → Lambda → Text Extraction → Chunking
-2. **Embedding Generation**: AWS Bedrock Titan Embeddings (1536 dimensions)
-3. **Dual Storage Strategy**:
-   - **Aurora PostgreSQL**: Relational storage with pgvector for structured queries
-   - **OpenSearch Serverless**: Vector search optimized for similarity queries
-4. **Bedrock Knowledge Base**: Managed ingestion and retrieval interface
-5. **Semantic Search**: Top-K retrieval using vector similarity
+### Data Flow
+
+**1. Document Ingestion:**
+- User uploads document via Gradio UI
+- Document → S3 bucket (`bedrock-poc-docs/`)
+- S3 event triggers Lambda (`main_handler.py`)
+- Lambda: extracts text → chunks → generates embeddings
+- Stores in `document_chunks` table with metadata
+- Creates `.metadata.json` for Bedrock
+- Triggers Bedrock Knowledge Base sync
+- Bedrock populates `bedrock_kb_documents` table
+
+**2. Querying:**
+- User asks question in UI
+- Lambda queries **Bedrock Knowledge Base** (NOT direct DB)
+- Bedrock retrieves from `bedrock_kb_documents` (vector search)
+- Applies metadata filters (tenant_id, user_id, document_ids)
+- Returns top-K results with similarity scores
+- OpenAI generates answer from retrieved context
+
+**3. Status Tracking:**
+- Database stores document metadata and tracking info
+- UI polls database for real-time status updates
+- Shows: pending → processing → completed
 
 ---
 
@@ -22,7 +112,7 @@ This PoC implements a multi-tiered storage and retrieval system:
 
 ### 1. Document Upload and Processing
 - Documents (`.txt`, `.pdf`, `.docx`) are uploaded to S3 bucket under `bedrock-poc-docs/` prefix
-- S3 event notification triggers the main Lambda handler ([main_handler.py](lambda/main_handler.py))
+- S3 event notification triggers the main Lambda handler ([main_handler.py](lambda_codes/main_handler.py))
 - Lambda extracts text and splits into configurable chunks (default: 300 words)
 
 ### 2. Multi-Tier Storage Pipeline

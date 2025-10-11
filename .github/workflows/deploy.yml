@@ -1,4 +1,4 @@
-name: CI/CD - Deploy CloudFormation PoC
+name: Deploy Bedrock Knowledge Base PoC
 
 on:
   push:
@@ -7,23 +7,34 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Select the deployment environment"
+        description: "Deployment environment"
         required: true
         default: dev
         type: choice
         options:
           - dev
+          - staging
+          - prod
+      reset_db:
+        description: "Reset database (drop and recreate tables)"
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   package-and-deploy:
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET || 'bedrock-ingest-bucket' }}
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
@@ -31,82 +42,212 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install zip and wget
-        run: sudo apt-get update && sudo apt-get install -y zip wget
-
-      # ------------------ Build Lambda layer (no numpy) ------------------
-      # - name: Build Lambda layer
-      #   run: |
-      #     mkdir -p layer_build
-      #     docker run --rm -v $PWD/layer_build:/var/task amazonlinux:2 /bin/bash -c "
-      #       yum install -y python3.11 python3-pip zip gcc libffi-devel postgresql-devel
-      #       python3.11 -m pip install --upgrade pip
-      #       mkdir -p python
-      #       pip3 install cryptography psycopg2-binary cffi -t python
-      #       rm -rf python/numpy*
-      #       zip -r ingest-dependencies-layer.zip python
-      #       mv ingest-dependencies-layer.zip /var/task/
-      #     "
-
-      # ------------------ Publish Lambda layer ------------------
-      # - name: Publish Lambda layer
-      #   id: publish_layer
-      #   run: |
-      #     LAYER_ARN=$(aws lambda publish-layer-version \
-      #       --layer-name ingest-dependencies-layer \
-      #       --description "Dependencies for all PoC Lambdas" \
-      #       --zip-file fileb://layer_build/ingest-dependencies-layer.zip \
-      #       --compatible-runtimes python3.11 \
-      #       --region $AWS_REGION \
-      #       --query 'LayerVersionArn' \
-      #       --output text)
-      #     echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
-
-      # ------------------ Prepare Lambda packages ------------------
-      - name: Prepare Lambda packages
+      - name: Install System Dependencies
         run: |
-          mkdir -p package
+          sudo apt-get update
+          sudo apt-get install -y zip wget postgresql-client libpq-dev gcc
 
-          # Copy all Python files for single Lambda
-          cp lambda/*.py package/
-
-          # Install Python dependencies (without numpy)
-          python -m pip install --upgrade pip
-          pip install --target ./package -r lambda/requirements.txt --no-deps
-
-          # Remove numpy if accidentally installed
-          rm -rf package/numpy*
-          rm -rf package/__pycache__/
-
-          # Zip the Lambda handlers
-          pushd package
-          zip -r ../s3_handler.zip *
-          zip -r ../init_db.zip *
-          zip -r ../index.zip *
-          popd
-
-      # ------------------ Upload Lambda artifacts ------------------
-      - name: Upload Lambda artifacts to S3
+      # ------------------ Build Lambda Layer ------------------
+      - name: Build Lambda Dependencies Layer
         run: |
-          BUCKET_NAME=$(echo "${{ secrets.CFN_CODE_BUCKET }}" | sed -E 's#^arn:aws:s3:::(.+)$#\1#')
-          aws s3 cp s3_handler.zip s3://$BUCKET_NAME/lambda/s3_handler.zip --region $AWS_REGION
-          aws s3 cp init_db.zip s3://$BUCKET_NAME/lambda/init_db.zip --region $AWS_REGION
-          aws s3 cp index.zip s3://$BUCKET_NAME/lambda/index.zip --region $AWS_REGION
+          echo "Building Lambda layer with dependencies..."
+          mkdir -p python/lib/python3.11/site-packages
 
-      # ------------------ Deploy CloudFormation ------------------
-      - name: Deploy CloudFormation
+          # Install dependencies
+          pip install \
+            psycopg2-binary \
+            pdfplumber \
+            python-docx \
+            boto3 \
+            -t python/lib/python3.11/site-packages/
+
+          # Remove unnecessary files
+          cd python/lib/python3.11/site-packages
+          rm -rf pip* setuptools* wheel* *.dist-info __pycache__
+          cd -
+
+          # Create layer zip
+          zip -r ingest-dependencies-layer.zip python/
+
+          echo "✅ Layer built successfully"
+
+      # ------------------ Publish Lambda Layer ------------------
+      - name: Publish Lambda Layer
+        id: publish_layer
         run: |
+          echo "Publishing Lambda layer..."
+
+          LAYER_ARN=$(aws lambda publish-layer-version \
+            --layer-name ingest-dependencies-layer \
+            --description "Dependencies for Bedrock KB PoC Lambdas" \
+            --zip-file fileb://ingest-dependencies-layer.zip \
+            --compatible-runtimes python3.11 \
+            --region $AWS_REGION \
+            --query 'LayerVersionArn' \
+            --output text)
+
+          echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
+          echo "✅ Layer published: $LAYER_ARN"
+
+      # ------------------ Package Lambda Functions ------------------
+      - name: Package Lambda Functions
+        run: |
+          echo "Packaging Lambda functions..."
+
+          # Package main_handler (s3_handler)
+          cd lambda_codes
+          zip -r ../s3_handler.zip main_handler.py
+          cd ..
+
+          # Package init_db
+          cd lambda_codes
+          zip -r ../init_db.zip init_db.py
+          cd ..
+
+          # Package index (for OpenSearch - optional)
+          cd lambda_codes
+          zip -r ../index.zip index.py
+          cd ..
+
+          echo "✅ Lambda functions packaged"
+
+      # ------------------ Upload to S3 ------------------
+      - name: Upload Lambda Artifacts to S3
+        run: |
+          echo "Uploading Lambda artifacts to S3..."
+
+          # Ensure bucket exists
+          aws s3 mb s3://$S3_BUCKET --region $AWS_REGION 2>/dev/null || true
+
+          # Create lambda folder
+          aws s3api put-object \
+            --bucket $S3_BUCKET \
+            --key lambda/ \
+            --region $AWS_REGION || true
+
+          # Upload Lambda zips
+          aws s3 cp s3_handler.zip s3://$S3_BUCKET/lambda/ --region $AWS_REGION
+          aws s3 cp init_db.zip s3://$S3_BUCKET/lambda/ --region $AWS_REGION
+          aws s3 cp index.zip s3://$S3_BUCKET/lambda/ --region $AWS_REGION
+
+          echo "✅ Artifacts uploaded to s3://$S3_BUCKET/lambda/"
+
+      # ------------------ Deploy CloudFormation Stack ------------------
+      - name: Deploy CloudFormation Stack
+        run: |
+          echo "Deploying CloudFormation stack..."
+
+          RESET_DB="${{ github.event.inputs.reset_db || 'false' }}"
+
           aws cloudformation deploy \
             --template-file cft/template.yml \
-            --stack-name bedrock-s3-ingest-db-poc \
-            --capabilities CAPABILITY_NAMED_IAM \
+            --stack-name bedrock-kb-poc \
+            --capabilities CAPABILITY_NAMED_IAM CAPABILITY_IAM \
             --parameter-overrides \
-              HandlerS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
-              HandlerS3Key=lambda/s3_handler.zip \
-              HandlerLayerArn=$LAYER_ARN \
-              InitDBLambdaS3Bucket=${{ secrets.CFN_CODE_BUCKET }} \
-              InitDBLambdaS3Key=lambda/init_db.zip \
-              InitDBLambdaLayerArn=$LAYER_ARN \
               DBUsername=poc_admin \
               DBName=bedrock_poc \
+              InstanceClass=db.r6g.large \
+            --region $AWS_REGION \
+            --no-fail-on-empty-changeset
+
+          echo "✅ CloudFormation stack deployed"
+
+      # ------------------ Get Stack Outputs ------------------
+      - name: Get Stack Outputs
+        id: stack_outputs
+        run: |
+          echo "Fetching stack outputs..."
+
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name bedrock-kb-poc \
+            --region $AWS_REGION \
+            --query 'Stacks[0].Outputs' \
+            --output json)
+
+          echo "$OUTPUTS" | jq '.'
+
+          # Extract key outputs
+          KB_ID=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="BedrockKnowledgeBaseId") | .OutputValue')
+          DB_ENDPOINT=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="RDSClusterEndpoint") | .OutputValue')
+
+          echo "KB_ID=$KB_ID" >> $GITHUB_ENV
+          echo "DB_ENDPOINT=$DB_ENDPOINT" >> $GITHUB_ENV
+
+          echo "✅ Knowledge Base ID: $KB_ID"
+          echo "✅ Database Endpoint: $DB_ENDPOINT"
+
+      # ------------------ Configure S3 Event Notification ------------------
+      - name: Configure S3 Event Notification
+        run: |
+          echo "Configuring S3 event notification..."
+
+          LAMBDA_ARN=$(aws cloudformation describe-stacks \
+            --stack-name bedrock-kb-poc \
+            --region $AWS_REGION \
+            --query 'Stacks[0].Outputs[?OutputKey==`S3HandlerLambdaName`].OutputValue' \
+            --output text)
+
+          LAMBDA_FULL_ARN=$(aws lambda get-function \
+            --function-name $LAMBDA_ARN \
+            --region $AWS_REGION \
+            --query 'Configuration.FunctionArn' \
+            --output text)
+
+          # Add Lambda permission for S3
+          aws lambda add-permission \
+            --function-name $LAMBDA_ARN \
+            --statement-id S3InvokePermission \
+            --action lambda:InvokeFunction \
+            --principal s3.amazonaws.com \
+            --source-arn arn:aws:s3:::$S3_BUCKET \
+            --region $AWS_REGION 2>/dev/null || echo "Permission already exists"
+
+          # Configure S3 bucket notification
+          cat > notification-config.json <<EOF
+          {
+            "LambdaFunctionConfigurations": [
+              {
+                "Id": "TriggerDocumentProcessing",
+                "LambdaFunctionArn": "$LAMBDA_FULL_ARN",
+                "Events": ["s3:ObjectCreated:*"],
+                "Filter": {
+                  "Key": {
+                    "FilterRules": [
+                      {
+                        "Name": "prefix",
+                        "Value": "bedrock-poc-docs/"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+          EOF
+
+          aws s3api put-bucket-notification-configuration \
+            --bucket $S3_BUCKET \
+            --notification-configuration file://notification-config.json \
             --region $AWS_REGION
+
+          echo "✅ S3 event notification configured"
+
+      # ------------------ Summary ------------------
+      - name: Deployment Summary
+        run: |
+          echo "======================================"
+          echo "🎉 DEPLOYMENT COMPLETE"
+          echo "======================================"
+          echo ""
+          echo "Stack Name: bedrock-kb-poc"
+          echo "Region: $AWS_REGION"
+          echo "S3 Bucket: $S3_BUCKET"
+          echo "Knowledge Base ID: $KB_ID"
+          echo "Database Endpoint: $DB_ENDPOINT"
+          echo ""
+          echo "📚 Next Steps:"
+          echo "1. Update your local .env file with these values"
+          echo "2. Test by uploading a document to s3://$S3_BUCKET/bedrock-poc-docs/"
+          echo "3. Run 'python app.py' locally to access the UI"
+          echo ""
+          echo "======================================"

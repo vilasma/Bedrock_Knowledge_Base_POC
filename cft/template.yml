@@ -7,19 +7,42 @@ Parameters:
   DBUsername:
     Type: String
     Default: poc_admin
+    Description: Master username for Aurora PostgreSQL
   DBName:
     Type: String
     Default: bedrock_poc
+    Description: Database name
   InstanceClass:
     Type: String
     Default: db.r6g.large
+    Description: RDS instance class
+    AllowedValues:
+      - db.r6g.large
+      - db.r6g.xlarge
+      - db.r6g.2xlarge
+      - db.t4g.medium
   DBAllocatedStorage:
     Type: Number
     Default: 20
-  # OpenSearchIndexName:
-  #   Type: String
-  #   Default: kb-sync-data-index
-  #   Description: "OpenSearch index name for storing vector chunks"
+    Description: Allocated storage in GB
+  S3BucketName:
+    Type: String
+    Default: bedrock-ingest-bucket
+    Description: S3 bucket for document storage
+  LambdaLayerArn:
+    Type: String
+    Default: ''
+    Description: ARN of Lambda layer (leave empty to use latest from deploy pipeline)
+  ResetDB:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Reset database tables on init
+
+Conditions:
+  UseProvidedLayer: !Not [!Equals [!Ref LambdaLayerArn, '']]
 
 Resources:
   ### VPC & Subnets
@@ -295,8 +318,8 @@ Resources:
                   - s3:GetObject
                   - s3:PutObject
                 Resource:
-                  - arn:aws:s3:::bedrock-ingest-bucket
-                  - arn:aws:s3:::bedrock-ingest-bucket/*
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
               # Secrets Manager
               - Effect: Allow
                 Action:
@@ -372,21 +395,23 @@ Resources:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
       Code:
-        S3Bucket: bedrock-ingest-bucket
+        S3Bucket: !Ref S3BucketName
         S3Key: lambda/init_db.zip
-      Layers:
-        - arn:aws:lambda:us-east-1:017000801446:layer:AWSLambdaPowertoolsPythonV2:78
+      Layers: !If
+        - UseProvidedLayer
+        - [!Ref LambdaLayerArn]
+        - []
       Environment:
         Variables:
-          INPUT_S3_DIR: bedrock-ingest-bucket
+          INPUT_S3_DIR: !Ref S3BucketName
           DB_SECRET_ARN: !Ref DBSecret
           DB_NAME: !Ref DBName
           DB_USER: !Ref DBUsername
           DB_CLUSTER_ARN: !Ref RDSCluster
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
-          REGION: us-east-1
-          RESET_DB: "true"   # Set to "true" to drop & recreate tables
+          REGION: !Ref AWS::Region
+          RESET_DB: !Ref ResetDB
 
   InvokeInitDB:
     Type: Custom::InvokeLambda
@@ -411,17 +436,19 @@ Resources:
         SubnetIds:
           - !Ref PrivateSubnet1
           - !Ref PrivateSubnet2
-      Layers:
-        - arn:aws:lambda:us-east-1:632944299864:layer:ingest-dependencies-layer:63
+      Layers: !If
+        - UseProvidedLayer
+        - [!Ref LambdaLayerArn]
+        - []
       Code:
-        S3Bucket: bedrock-ingest-bucket
+        S3Bucket: !Ref S3BucketName
         S3Key: lambda/s3_handler.zip
       Environment:
         Variables:
-          S3_BUCKET_NAME: bedrock-ingest-bucket
+          S3_BUCKET_NAME: !Ref S3BucketName
           METADATA_FIELDS: "tenant_id,user_id,document_id,project_id,thread_id"
           S3_INCOMING_PREFIX: bedrock-poc-docs/
-          REGION: us-east-1
+          REGION: !Ref AWS::Region
           # DB
           DB_HOST: !GetAtt RDSCluster.Endpoint.Address
           DB_PORT: !GetAtt RDSCluster.Endpoint.Port
@@ -446,7 +473,7 @@ Resources:
       FunctionName: !Ref S3HandlerLambda
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
-      SourceArn: arn:aws:s3:::bedrock-ingest-bucket
+      SourceArn: !Sub 'arn:aws:s3:::${S3BucketName}'
       SourceAccount: !Ref AWS::AccountId
 
   ### Bedrock Knowledge Base IAM Role
@@ -482,8 +509,8 @@ Resources:
                   - s3:GetObject
                   - s3:ListBucket
                 Resource:
-                  - arn:aws:s3:::bedrock-ingest-bucket
-                  - arn:aws:s3:::bedrock-ingest-bucket/*
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
               - Effect: Allow
                 Action:
                   - rds:DescribeDBClusters
@@ -624,41 +651,29 @@ Resources:
   # ---------------- Bedrock Knowledge Base ----------------
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
-    DependsOn:  
-      # - OpenSearchCollection
-      # - InvokeCreateIndex  # Changed from OpenSearchCollectionIndexs
-      # - OpenSearchDataAccessPolicy
-      # - OpenSearchEncryptionPolicy
-      # - OpenSearchNetworkPolicy
-      #- BedrockKnowledgeBaseRole
-      - InvokeInitDB
+    DependsOn:
+      - InvokeInitDB  # Ensure bedrock_vectors table is created first
     Properties:
-      Name: poc-bedrock-kb-ingest
-      Description: "Knowledge Base using OpenSearch vector backend"
+      Name: poc-bedrock-kb
+      Description: "Knowledge Base using S3 data source with Aurora vector storage"
       RoleArn: !GetAtt BedrockKnowledgeBaseRole.Arn
       KnowledgeBaseConfiguration:
         Type: VECTOR
         VectorKnowledgeBaseConfiguration:
           EmbeddingModelArn: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v1
       StorageConfiguration:
-        # Type: "OPENSEARCH_SERVERLESS"
-        # OpensearchServerlessConfiguration:
-        #   CollectionArn: !GetAtt OpenSearchCollection.Arn  
-        #   VectorIndexName: kb-sync-data-index
-        #   FieldMapping:
-        #     VectorField: embedding_vector
-        #     TextField: chunk_text
-        #     MetadataField: metadata
+        # Bedrock uses Aurora RDS for vector storage
+        # bedrock_kb_documents table is managed by Bedrock - DO NOT manually modify
         Type: RDS
         RdsConfiguration:
-          ResourceArn: !GetAtt RDSCluster.DBClusterArn
+          ResourceArn: !Sub "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:${RDSCluster}"
           CredentialsSecretArn: !Ref DBSecret
           DatabaseName: !Ref DBName
-          TableName: "document_chunks"
+          TableName: "bedrock_kb_documents"
           FieldMapping:
-            PrimaryKeyField: chunk_id
-            VectorField: embedding_vector
-            TextField: chunk_text
+            PrimaryKeyField: id
+            VectorField: embedding
+            TextField: chunks
             MetadataField: metadata
       
   # ---------------- Bedrock Data Source ----------------
@@ -673,47 +688,116 @@ Resources:
       DataSourceConfiguration:
         Type: S3
         S3Configuration:
-          BucketArn: arn:aws:s3:::bedrock-ingest-bucket
+          BucketArn: !Sub 'arn:aws:s3:::${S3BucketName}'
           InclusionPrefixes:
             - "bedrock-poc-docs/"
 
 Outputs:
+  # Database Outputs
   RDSClusterEndpoint:
-    Description: Aurora cluster endpoint
+    Description: Aurora PostgreSQL cluster endpoint
     Value: !GetAtt RDSCluster.Endpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-DBEndpoint'
 
   RDSClusterPort:
     Description: Aurora cluster port
     Value: !GetAtt RDSCluster.Endpoint.Port
+    Export:
+      Name: !Sub '${AWS::StackName}-DBPort'
 
   DBSecretArn:
     Description: Secrets Manager ARN containing DB credentials
     Value: !Ref DBSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-DBSecretArn'
 
+  DBName:
+    Description: Database name
+    Value: !Ref DBName
+    Export:
+      Name: !Sub '${AWS::StackName}-DBName'
+
+  # Lambda Outputs
   InitDBLambdaName:
     Description: Lambda function to initialize DB
     Value: !Ref InitDBLambda
+    Export:
+      Name: !Sub '${AWS::StackName}-InitDBLambda'
 
   S3HandlerLambdaName:
-    Description: Lambda function for ingestion
+    Description: Lambda function for document ingestion
     Value: !Ref S3HandlerLambda
-  
-  # OpenSearchCollectionEndpoint:
-  #   Description: "OpenSearch Serverless Collection Endpoint"
-  #   Value: !GetAtt OpenSearchCollection.CollectionEndpoint
-  
-  # OpenSearchCollectionArn:
-  #   Description: ARN of the OpenSearch Serverless collection.
-  #   Value: !GetAtt OpenSearchCollection.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-S3HandlerLambda'
 
+  S3HandlerLambdaArn:
+    Description: ARN of S3 handler Lambda
+    Value: !GetAtt S3HandlerLambda.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-S3HandlerLambdaArn'
+
+  # S3 Outputs
+  S3BucketName:
+    Description: S3 bucket for document storage
+    Value: !Ref S3BucketName
+    Export:
+      Name: !Sub '${AWS::StackName}-S3Bucket'
+
+  # Bedrock Outputs
   BedrockKnowledgeBaseArn:
     Description: ARN of the Bedrock Knowledge Base
     Value: !Ref BedrockKnowledgeBase
+    Export:
+      Name: !Sub '${AWS::StackName}-KBArn'
 
   BedrockKnowledgeBaseId:
-    Description: Name of the Bedrock Knowledge Base
+    Description: ID of the Bedrock Knowledge Base
     Value: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
+    Export:
+      Name: !Sub '${AWS::StackName}-KBID'
+
+  BedrockDataSourceId:
+    Description: ID of the Bedrock Data Source
+    Value: !GetAtt KnowledgeBaseDataSource.DataSourceId
+    Export:
+      Name: !Sub '${AWS::StackName}-DataSourceID'
 
   BedrockKnowledgeBaseRoleArn:
     Description: IAM Role ARN used by Bedrock Knowledge Base
     Value: !GetAtt BedrockKnowledgeBaseRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-KBRoleArn'
+
+  # VPC Outputs
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPC'
+
+  PrivateSubnet1:
+    Description: Private Subnet 1 ID
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet1'
+
+  PrivateSubnet2:
+    Description: Private Subnet 2 ID
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet2'
+
+  # Configuration for Local App
+  EnvConfigSummary:
+    Description: Configuration summary for local .env file
+    Value: !Sub |
+      Copy these values to your .env file:
+      DB_HOST=${RDSCluster.Endpoint.Address}
+      DB_PORT=${RDSCluster.Endpoint.Port}
+      DB_NAME=${DBName}
+      DB_SECRET_ARN=${DBSecret}
+      S3_BUCKET=${S3BucketName}
+      LAMBDA_FUNCTION=${S3HandlerLambda}
+      KNOWLEDGE_BASE_ID=${BedrockKnowledgeBase.KnowledgeBaseId}
+      AWS_REGION=${AWS::Region}
