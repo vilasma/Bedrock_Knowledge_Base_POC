@@ -138,7 +138,8 @@ def lambda_handler(event, context):
                 metadata JSONB DEFAULT '{}'::jsonb,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
-                CONSTRAINT unique_document_chunk UNIQUE(document_id, chunk_hash)  -- prevents duplicate chunks
+                CONSTRAINT unique_document_chunk_index UNIQUE(document_id, chunk_index),  -- Required for Bedrock ON CONFLICT
+                CONSTRAINT unique_document_chunk_hash UNIQUE(document_id, chunk_hash)  -- Prevents duplicate chunks
             );
 
             -- Indexes for faster similarity queries
