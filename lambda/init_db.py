@@ -83,6 +83,15 @@ def lambda_handler(event, context):
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
         cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
 
+        # Check pgvector version (must be >= 0.5.0 for HNSW support)
+        cur.execute("SELECT extversion FROM pg_extension WHERE extname = 'vector';")
+        vector_version = cur.fetchone()[0]
+        logger.info(f"pgvector version: {vector_version}")
+
+        # Verify HNSW support
+        if vector_version < '0.5.0':
+            raise Exception(f"pgvector version {vector_version} does not support HNSW. Requires >= 0.5.0")
+
         # Optional reset
         if RESET_DB:
             cur.execute("""
