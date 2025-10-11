@@ -668,8 +668,8 @@ Resources:
       - BedrockKnowledgeBase
     Properties:
       KnowledgeBaseId: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
-      Name: "S3-DataSource"
-      Description: "S3 source for Bedrock ingestion"
+      Name: "OpenSearch-DataSource"
+      Description: "OpenSearch collection for Bedrock ingestion"
       DataSourceConfiguration:
         Type: S3
         S3Configuration:
