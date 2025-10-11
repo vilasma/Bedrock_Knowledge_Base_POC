@@ -145,7 +145,9 @@ def lambda_handler(event, context):
             -- Indexes for faster similarity queries
             CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON document_chunks(document_id);
             CREATE INDEX IF NOT EXISTS idx_chunks_similarity ON document_chunks(similarity_score);
-            CREATE INDEX IF NOT EXISTS idx_chunks_vector ON document_chunks USING ivfflat (embedding_vector vector_l2_ops);
+
+            -- HNSW index for vector similarity search (required by AWS Bedrock)
+            CREATE INDEX IF NOT EXISTS idx_chunks_vector ON document_chunks USING hnsw (embedding_vector vector_cosine_ops);
 
             -- GIN index for full-text search (required by AWS Bedrock)
             CREATE INDEX IF NOT EXISTS idx_chunks_text_gin ON document_chunks USING gin (to_tsvector('simple', chunk_text));
