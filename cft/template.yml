@@ -656,7 +656,7 @@ Resources:
           DatabaseName: !Ref DBName
           TableName: "document_chunks"
           FieldMapping:
-            PrimaryKeyField: document_id
+            PrimaryKeyField: chunk_id
             VectorField: embedding_vector
             TextField: chunk_text
             MetadataField: metadata
@@ -668,8 +668,8 @@ Resources:
       - BedrockKnowledgeBase
     Properties:
       KnowledgeBaseId: !GetAtt BedrockKnowledgeBase.KnowledgeBaseId
-      Name: "OpenSearch-DataSource"
-      Description: "OpenSearch collection for Bedrock ingestion"
+      Name: "S3-DataSource"
+      Description: "S3 source for Bedrock ingestion"
       DataSourceConfiguration:
         Type: S3
         S3Configuration:
